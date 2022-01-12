@@ -1,3 +1,4 @@
+import os.path
 import time
 import numpy as np
 import glob
@@ -5,11 +6,12 @@ import json
 import multiprocessing as mp
 
 
-class fdsOutputToJson:
-    def __init__(self, fds_output_directory, fds_input_location, saveType="json"):
+class fdsOutputToUnity:
+    def __init__(self, fds_output_directory, fds_input_location,save_location, saveType="json"):
         self.directory = fds_output_directory
         self.qFiles = glob.glob(fds_output_directory + "*.q")
         self.fileCounter = 0
+        self.save_location = save_location
         self.allFilesDict = {}
         self.fds_input_location = fds_input_location
 
@@ -140,7 +142,6 @@ class fdsOutputToJson:
 
         maxValue = [-np.inf] * self.lenHeaderCountTitles
 
-        print(fileTime)
         datamean = []
         for file in self.filenames[fileTime]:
             with open(file, "rb") as f:
@@ -198,12 +199,7 @@ class fdsOutputToJson:
         Returns:
             None
         """
-        print("My Mean")
-        print(self.myMean)
-        print("My Min")
-        print(self.minValues)
-        print("My Max")
-        print(self.maxValues)
+
         self.hrrLowerLimit = self.minValues[-1]
         self.smokeLowerLimit = self.myMean[0]
         self.multiMesh = multiMesh
@@ -247,7 +243,7 @@ class fdsOutputToJson:
                         self.lenHeaderCountTitles,
                     ),
                     order="F",
-                ).T
+                )
 
                 meshNumber = self.getMeshNumber(file) - 1
                 for i in range(nz):
@@ -328,6 +324,7 @@ class fdsOutputToJson:
             + "_".join(fileName.split("_")[-2:])
         )
         newFileName = newFileName.split(".q")[0] + ".bin"
+        newFileName = self.save_location+os.path.basename(newFileName)
         headerCountTitles = ["smoke", "U-VELOCITY", "V-VELOCITY", "W-VELOCITY", "fire"]
         # header {number of eachtype of value to be saved  } 'DENSITY','U-VELOCITY','V-VELOCITY','W-VELOCITY','HRRPUV'
 
@@ -369,8 +366,8 @@ class fdsOutputToJson:
 # print( data, header[1:-1])
 if __name__ == "__main__":
     startTime = time.time()
-    app = fdsOutputToJson(
-        "~/Work/fds3", "/home/kl3pt0/Work/fds2Unity/trails.fds", "bin"
+    app = fdsOutputToUnity(
+        "E:\\fds3\\", "E:\\fds3\\fds\\trails.fds", "bin"
     )
     meshDict = {
         "I_UPPER": 7,
@@ -380,6 +377,6 @@ if __name__ == "__main__":
         "J": 164,
         "K": 40,
     }
-    # app.findMaxValuesParallel()
-    # app.runParallel()
-    # print(time.time() - startTime)
+    app.findMaxValuesParallel()
+    app.runParallel()
+    print(time.time() - startTime)

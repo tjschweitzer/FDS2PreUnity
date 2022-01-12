@@ -227,7 +227,7 @@ class fds2ComplexGeom:
             faceCounter += 1
 
         for face_i in range(len(faces)):
-            faces[face_i] = [faces[face_i][1],faces[face_i][0],faces[face_i][2]]
+            faces[face_i] = [faces[face_i][1], faces[face_i][0], faces[face_i][2]]
         self.jsonDict = {
             "meshData": self.__meshBounds,
             "verts": vertices,
@@ -237,25 +237,27 @@ class fds2ComplexGeom:
     def save2Json(self, filename):
 
         for key in self.jsonDict:
-            print(key,type(self.jsonDict[key]))
-            if type(self.jsonDict[key])== np.ndarray:
+            print(key, type(self.jsonDict[key]))
+            if type(self.jsonDict[key]) == np.ndarray:
                 self.jsonDict[key] = self.jsonDict[key].tolist()
 
         with open(filename, "w") as f:
             json.dump(self.jsonDict, f)
 
+
 def main(args):
-    if len(args)==0:
+    if len(args) == 0:
         app = fds2ComplexGeom("/home/trent/Work/FDS2UnityTool/data/trails.fds")
         app.save2Json("data/testy.json")
         return
-    if len(args)!=2:
+    if len(args) != 2:
         print("Useage : fds2ComplexGeom {fds Input File} {save Location}")
         return
     fds_loc = args[0]
     save_loc = args[1]
     app = fds2ComplexGeom(fds_loc)
     app.save2Json(save_loc)
+
 
 if __name__ == "__main__":
     main(sys.argv[1:])

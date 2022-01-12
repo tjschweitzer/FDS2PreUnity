@@ -1,10 +1,8 @@
-
 # Import the required modules
 import sys
 from scipy.integrate import solve_ivp
 import numpy as np
 import glob
-
 
 
 class windODE:
@@ -31,6 +29,7 @@ class windODE:
     def readInBin(self):
         print("Reading in File")
         for file in self.__qFiles:
+            print(file)
             self.__memorizedFiles[file] = self.read_in_bin(file)
         print("Reading in Done")
         return self
@@ -114,7 +113,7 @@ class windODE:
             point = [
                 (XB[0] + XB[1]) / 2.0,
                 (XB[2] + XB[3]) / 2.0,
-                (XB[5]) + self.voxalSize["Z"] / 2.0,
+                (XB[5]) + self.voxalSize["Z"],
             ]
             if "X_MIN" in self.startpoints:
                 if XB[0] <= X_Min_Value <= XB[1]:
@@ -137,13 +136,14 @@ class windODE:
         for t_start in self.__timeList:
             if t_start > self.t_span[1] or t_start < self.t_span[0]:
                 break
-            print(f"time {t_start}", end=" ")
+
+            print(f"time {t_start}",)
 
             closest_timeStep = min(self.__timeList, key=lambda x: abs(x - t_start))
             counter = np.where(self.__timeList == closest_timeStep)[0][0]
             all_results = []
             for startCounter in range(len(self.startpoints)):
-                print(startCounter, end="  ")
+
                 y0 = self.startpoints[startCounter]
 
                 t_span = [
@@ -173,7 +173,7 @@ class windODE:
             print(numberofWindstreams)
             print(lengthofWindStreams)
             time_string = f"{time}".split(".")[1]
-            with open(f"{fileName}_{int(time)}_{time_string}.bin", "wb") as outfile:
+            with open(f"{fileName}_{int(time)}_{time_string}.binwind", "wb") as outfile:
 
                 np.ndarray.tofile(np.array([maxVel], dtype=np.float32), outfile)
                 np.ndarray.tofile(np.array([numberofWindstreams], dtype=int), outfile)
@@ -184,6 +184,7 @@ class windODE:
                     for j in range(len(data[i]["y"][0])):
                         currentStream.append(
                             [
+                                data[i]["t"][j],
                                 data[i]["velocity"][j],
                                 data[i]["y"][0][j],
                                 data[i]["y"][1][j],
@@ -194,10 +195,8 @@ class windODE:
                     np.ndarray.tofile(
                         np.array(currentStream, dtype=np.float32), outfile
                     )
-                    print(i, currentStream)
-
                 print(fileName, "saved")
-            return self
+        return self
 
     def getFileTimeStep(self, file):
         """
@@ -287,19 +286,19 @@ def main(args):
         )
         print("Wind Start points can be 1 or more {X_MIN, X_MAX,Y_MIN, Y_MAX}")
         # return
-    dir = args[0]
-    fds_loc = args[1]
-    t_span = [args[2], args[3]]
-    start_points = args[4:]
+    # dir = args[0]
+    # fds_loc = args[1]
+    # t_span = [args[2], args[3]]
+    # start_points = args[4:]
 
-    fds_loc = "/home/kl3pt0/Work/fds2Unity/trails.fds"
-    dir = "/home/kl3pt0/Work/fds3/"
+    fds_loc = "E:\\fds3\\fds\\trails.fds"
+    dir = "E:\\fds3\\"
 
-    t_span = [0, 20]
+    t_span = [0, 100]
     start_points = ["X_MIN", "X_MAX"]
 
     app = windODE(dir, fds_loc, t_span, start_points)
-    app.getMeshBound().getStartingPoints().readInBin().runODE().write2bin("temp")
+    app.getMeshBound().getStartingPoints().readInBin().runODE().write2bin("data\\temp")
 
 
 # %%
