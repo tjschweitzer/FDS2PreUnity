@@ -1,45 +1,52 @@
-# This is a sample Python script.
-
-
-# Press Shift+F10 to execute it or replace it with your code.
-# Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
 import sys, shutil
-
-import fds2ComplexGeom
+from fds2ComplexGeom import fds2ComplexGeom
 from fdsOutput2Unity import fdsOutputToUnity
-import windODE_class
+from windODE_class import windODE
+
 import os
 
 
 def main(args):
-    # fdsOutputDir = args[0] # directory of the plot3d files from fds output
-    # fdsInputFile = args[1] # location of fds input file
-    # saveLocation = args[2] # desired directory for all files to be saved
-    fdsOutputDir = "E:\\fds3\\" # directory of the plot3d files from fds output
-    fdsInputFile = "E:\\fds3\\fds\\trails.fds" # location of fds input file
-    saveLocation = "E:\\saveLoc\\" # desired directory for all files to be saved
+    fdsOutputDir = "E:\\fds3\\"  # directory of the plot3d files from fds output
+    fdsInputFile = "E:\\fds3\\fds\\trails.fds"  # location of fds input file
+    saveLocation = "E:\\saveLoc\\"  # desired directory for all files to be saved
 
+    # windODE Variables
+    t_span = [0, 100]  # range of start time for wind vectors
+    starting_points = ["X_MIN", "X_MAX", "Y_MIN", "Y_MAX"]  # what sides of mesh used
+
+    if len(args) > 6:
+        fdsOutputDir = args[0]  # directory of the plot3d files from fds output
+        fdsInputFile = args[1]  # location of fds input file
+        saveLocation = args[2]  # desired directory for all files to be saved
+        t_span = args[3:5]  # range of start time for wind vectors
+        starting_points = args[5:]  # what sides of mesh used
+
+    # Creating the directories for where all the custom data will be saved
     if not os.path.exists(saveLocation):
         os.makedirs(saveLocation)
-    if not os.path.exists(os.path.join(saveLocation,"wind")):
-        os.makedirs(os.path.join(saveLocation,"wind"))
+    if not os.path.exists(os.path.join(saveLocation, "wind")):
+        os.makedirs(os.path.join(saveLocation, "wind"))
     if not os.path.exists(os.path.join(saveLocation, "fds")):
         os.makedirs(os.path.join(saveLocation, "fds"))
 
-    # app = fdsOutputToUnity(
-    #     fdsOutputDir, fdsInputFile,saveLocation, "bin"
-    # )
-    # app.findMaxValuesParallel()
-    # app.runParallel()
+    # Copies the fds input file to save location
+    shutil.copy(fdsInputFile, os.path.join(saveLocation, "fds"))
 
-    app = windODE_class.windODE(fdsOutputDir,fdsInputFile,[0,100],["X_MIN","X_MAX","Y_MIN","Y_MAX",])
-    app.getMeshBound().getStartingPoints().readInBin().runODE().write2bin(os.path.join(os.path.join(saveLocation,"wind"),"temp"))
-    shutil.copy(fdsInputFile,os.path.join(saveLocation,"fds"))
-    app = fds2ComplexGeom.fds2ComplexGeom(fdsInputFile)
-    app.save2Json(os.path.join(os.path.join(saveLocation,"fds"),"sample.json"))
+    # Converts plot3d data to a sparce matrix binary file
+    app = fdsOutputToUnity(fdsOutputDir, fdsInputFile, saveLocation, "bin")
+    app.findMaxValuesParallel()
+    app.runParallel()
 
-# Press the green button in the gutter to run the script.
+    # Ordinary Differential Equations for wind vectors
+    windODE(fdsOutputDir, fdsInputFile, t_span, starting_points).getMeshBound().getStartingPoints().readInBin().runODE().write2bin(
+        os.path.join(os.path.join(saveLocation, "wind"), "temp")
+    )
+
+    # converts fds input file into a complex geometry json
+    app = fds2ComplexGeom(fdsInputFile)
+    app.save2Json(os.path.join(os.path.join(saveLocation, "fds"), "topo.json"))
+
+
 if __name__ == "__main__":
     main(sys.argv[1:])
-
-# See PyCharm help at https://www.jetbrains.com/help/pycharm/

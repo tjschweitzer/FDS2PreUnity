@@ -137,7 +137,9 @@ class windODE:
             if t_start > self.t_span[1] or t_start < self.t_span[0]:
                 break
 
-            print(f"time {t_start}",)
+            print(
+                f"time {t_start}",
+            )
 
             closest_timeStep = min(self.__timeList, key=lambda x: abs(x - t_start))
             counter = np.where(self.__timeList == closest_timeStep)[0][0]

@@ -7,7 +7,9 @@ import multiprocessing as mp
 
 
 class fdsOutputToUnity:
-    def __init__(self, fds_output_directory, fds_input_location,save_location, saveType="json"):
+    def __init__(
+        self, fds_output_directory, fds_input_location, save_location, saveType="json"
+    ):
         self.directory = fds_output_directory
         self.qFiles = glob.glob(fds_output_directory + "*.q")
         self.fileCounter = 0
@@ -324,7 +326,7 @@ class fdsOutputToUnity:
             + "_".join(fileName.split("_")[-2:])
         )
         newFileName = newFileName.split(".q")[0] + ".bin"
-        newFileName = self.save_location+os.path.basename(newFileName)
+        newFileName = self.save_location + os.path.basename(newFileName)
         headerCountTitles = ["smoke", "U-VELOCITY", "V-VELOCITY", "W-VELOCITY", "fire"]
         # header {number of eachtype of value to be saved  } 'DENSITY','U-VELOCITY','V-VELOCITY','W-VELOCITY','HRRPUV'
 
@@ -366,9 +368,7 @@ class fdsOutputToUnity:
 # print( data, header[1:-1])
 if __name__ == "__main__":
     startTime = time.time()
-    app = fdsOutputToUnity(
-        "E:\\fds3\\", "E:\\fds3\\fds\\trails.fds", "bin"
-    )
+    app = fdsOutputToUnity("E:\\fds3\\", "E:\\fds3\\fds\\trails.fds", "bin")
     meshDict = {
         "I_UPPER": 7,
         "J_UPPER": 0,
