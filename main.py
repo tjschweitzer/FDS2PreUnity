@@ -19,6 +19,8 @@ def main(args):
         fdsOutputDir = args[0]  # directory of the plot3d files from fds output
         fdsInputFile = args[1]  # location of fds input file
         saveLocation = args[2]  # desired directory for all files to be saved
+
+        # windODE Variables
         t_span = args[3:5]  # range of start time for wind vectors
         starting_points = args[5:]  # what sides of mesh used
 

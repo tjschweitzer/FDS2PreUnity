@@ -131,7 +131,7 @@ class windODE:
         self.startpoints = self.newStartingPoints
         return self
 
-    def runODE(self):
+    def runODE(self,activeTime=True):
         self.timeReasults = {}
         for t_start in self.__timeList:
             if t_start > self.t_span[1] or t_start < self.t_span[0]:
@@ -153,7 +153,7 @@ class windODE:
                     max(self.__timeList[counter:]),
                 ]
 
-                result_solve_ivp = solve_ivp(self.get_velocity, t_span, y0)
+                result_solve_ivp = solve_ivp(self.get_velocity, t_span, y0, args=[t_span[0],activeTime])
                 result_with_velocity = self.addVelocity(result_solve_ivp)
                 current_result_max_vel = np.max(result_with_velocity["velocity"])
                 if self.__maxVelocity < current_result_max_vel:
@@ -214,8 +214,9 @@ class windODE:
         time_milsec = int(file.split("_")[-1].split(".q")[0])
         return time_sec + time_milsec / 100.0
 
-    def get_velocity(self, t, x):
+    def get_velocity(self, t, x,t_0,ActiveTime):
 
+        t= t_0 if ActiveTime else t
         closest_timeStep = min(self.__timeList, key=lambda x: abs(x - t))
         counter = np.where(self.__timeList == closest_timeStep)[0][0]
         currentTimeStep = self.__timeList[counter]
