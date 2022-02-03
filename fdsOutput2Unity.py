@@ -4,7 +4,8 @@ import numpy as np
 import glob
 import json
 import multiprocessing as mp
-
+import fdsreader as fds
+import pyvista as pv
 
 class fdsOutputToUnity:
     def __init__(
@@ -28,6 +29,8 @@ class fdsOutputToUnity:
         self.minValues = np.array([np.inf] * self.lenHeaderCountTitles)
         self.maxValues = np.zeros(self.lenHeaderCountTitles)
         self.save_function = self.write2json if saveType == "json" else self.write2bin
+
+
 
     def readInFDS(self):
         with open(self.fds_input_location) as f:
@@ -367,16 +370,37 @@ class fdsOutputToUnity:
 
 # print( data, header[1:-1])
 if __name__ == "__main__":
+
+    mesh = sim.meshes[0]
+
+    extent = mesh.extent
+    # Select the last available timestep
+    t = -1
+    # Load 3D data for that timestep
+    pl_t1 = sim.data_3d[t]
+
+    # Create 3D grid
+    x_ = np.linspace(extent.x_start, extent.x_end, mesh.dimension['x'])
+    y_ = np.linspace(extent.y_start, extent.y_end, mesh.dimension['y'])  # y_ = np.array([29])
+    z_ = np.linspace(extent.z_start, extent.z_end, mesh.dimension['z'])
+    x, y, z = np.meshgrid(x_, y_, z_, indexing='ij')
+    points = np.stack((x.flatten(), y.flatten(), z.flatten()), axis=1)
+
+    # Select a quantity
+    quantity_idx = pl_t1.get_quantity_index("U-VEL")
+    quantity = pl_t1.quantities[quantity_idx]
+
+    # Get 3D data for a specific quantity in one of the meshes
+    color_data = pl_t1[mesh].data[:, :, :, quantity_idx]
+    # It is also possible to just plot a slice
+    # color_data = pl_t1[mesh].data[:, 29:30, :, quantity_idx]
+
+    # Plot 3D dat
+
+
     startTime = time.time()
-    app = fdsOutputToUnity("E:\\fds3\\", "E:\\fds3\\fds\\trails.fds", "bin")
-    meshDict = {
-        "I_UPPER": 7,
-        "J_UPPER": 0,
-        "K_UPPER": 4,
-        "I": 128,
-        "J": 164,
-        "K": 40,
-    }
+    app = fdsOutputToUnity("E:\\fds3\\", "E:\\fds3\\fds\\trails.fds","" "bin")
+
     app.findMaxValuesParallel()
     app.runParallel()
     print(time.time() - startTime)

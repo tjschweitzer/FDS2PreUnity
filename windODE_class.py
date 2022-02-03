@@ -1,13 +1,18 @@
 # Import the required modules
 import sys
 from scipy.integrate import solve_ivp
+import pyvista as pv
 import numpy as np
+import fdsreader as fds
 import glob
-
+import numpy as np
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import axes3d
 
 class windODE:
     def __init__(self, directory, fds_input_location, t_span, startpoints):
 
+        self.sim = fds.Simulation(directory)
         self.fds_input_location = fds_input_location
         self.startpoints = startpoints
         self.t_span = t_span
@@ -26,6 +31,7 @@ class windODE:
                 self.fileByTime[file_time] = file
         self.__memorizedFiles = {}
 
+        self.getMeshBounds()
     def readInBin(self):
         print("Reading in File")
         for file in self.__qFiles:
@@ -34,63 +40,30 @@ class windODE:
         print("Reading in Done")
         return self
 
-    def getMeshBound(self):
-        with open(self.fds_input_location) as f:
-            lines = f.readlines()
+    def getMeshBounds(self):
+        self.mesh = self.sim.meshes[0]
+        self.mesh_extent = self.sim.meshes[0].extent
 
-        lineCounter = 0
-        while lineCounter < len(lines):
-            current_line = lines[lineCounter]
-            if current_line == "\n":
-                lineCounter += 1
-                continue
-            while "/" not in lines[lineCounter]:
-                lineCounter += 1
-                current_line = current_line + lines[lineCounter]
-            if "&MESH" in current_line:
-                mesh_line = current_line.replace("/", "").replace("\n", "")
-
-                IJK = mesh_line.split("IJK=")[1].split(",")[:3]
-                XB = mesh_line.split("XB=")[1].split(",")[:6]
-                print(IJK, XB)
-                self.__meshBounds = {
-                    "X_MIN": float(XB[0]),
-                    "Y_MIN": float(XB[2]),
-                    "Z_MIN": float(XB[4]),
-                    "X_MAX": float(XB[1]),
-                    "Y_MAX": float(XB[3]),
-                    "Z_MAX": float(XB[5]),
-                    "I": float(IJK[0]),
-                    "J": float(IJK[1]),
-                    "K": float(IJK[2]),
-                }
-                self.voxalSize = {
-                    "X": (self.__meshBounds["X_MAX"] - self.__meshBounds["X_MIN"])
-                    / self.__meshBounds["I"],
-                    "Y": (self.__meshBounds["Y_MAX"] - self.__meshBounds["Y_MIN"])
-                    / self.__meshBounds["J"],
-                    "Z": (self.__meshBounds["Z_MAX"] - self.__meshBounds["Z_MIN"])
-                    / self.__meshBounds["K"],
-                }
-                break
-
-            lineCounter += 1
+        self.voxalSize ={}
+        self.voxalSize["X"] = (self.mesh_extent.x_end-self.mesh_extent.x_start)/ (self.mesh.dimension['x']-1)
+        self.voxalSize["Z"] = (self.mesh_extent.z_end-self.mesh_extent.z_start)/ (self.mesh.dimension['z']-1)
+        self.voxalSize["Y"] = (self.mesh_extent.y_end-self.mesh_extent.y_start)/ (self.mesh.dimension['y']-1)
         return self
 
     def getStartingPoints(self):
         self.newStartingPoints = []
 
         X_Min_Value = (
-            self.__meshBounds["X_MIN"] + self.voxalSize["X"] / 2.0
+                self.mesh_extent.x_start + self.voxalSize["X"] / 2.0
         )  # Center point of mesh
         X_Max_Value = (
-            self.__meshBounds["X_MAX"] - self.voxalSize["X"] / 2.0
+            self.mesh_extent.x_end - self.voxalSize["X"] / 2.0
         )  # Center point of mesh
         Y_Min_Value = (
-            self.__meshBounds["Y_MIN"] + self.voxalSize["Y"] / 2.0
+            self.mesh_extent.y_start + self.voxalSize["Y"] / 2.0
         )  # Center point of mesh
         Y_Max_Value = (
-            self.__meshBounds["Y_MAX"] + self.voxalSize["Y"] / 2.0
+                self.mesh_extent.y_end + self.voxalSize["Y"] / 2.0
         )  # Center point of mesh
         with open(self.fds_input_location) as f:
             lines = f.readlines()
@@ -131,6 +104,21 @@ class windODE:
         self.startpoints = self.newStartingPoints
         return self
 
+    def startingPointsRibbon(self,starting_pont,ending_point, number_of_points):
+        newpoints = []
+
+        x_ = np.linspace(starting_pont[0], ending_point[0], number_of_points)
+        y_ = np.linspace(starting_pont[1], ending_point[1], number_of_points)  # y_ = np.array([29])
+        z_ = np.linspace(starting_pont[2], ending_point[2], number_of_points)
+
+        points = np.stack((x_.flatten(), y_.flatten(), z_.flatten()), axis=1)
+        self.startpoints = points
+        return self
+
+
+
+
+
     def runODE(self,activeTime=True):
         self.timeReasults = {}
         for t_start in self.__timeList:
@@ -152,7 +140,6 @@ class windODE:
                     min(self.__timeList[counter:]),
                     max(self.__timeList[counter:]),
                 ]
-
                 result_solve_ivp = solve_ivp(self.get_velocity, t_span, y0, args=[t_span[0],activeTime])
                 result_with_velocity = self.addVelocity(result_solve_ivp)
                 current_result_max_vel = np.max(result_with_velocity["velocity"])
@@ -168,6 +155,7 @@ class windODE:
     def write2bin(self, fileName):
         allData = self.timeReasults
         maxVel = self.__maxVelocity
+        print(f"Max {maxVel}")
         for time in allData.keys():
             data = allData[time]
             numberofWindstreams = len(data)
@@ -214,9 +202,9 @@ class windODE:
         time_milsec = int(file.split("_")[-1].split(".q")[0])
         return time_sec + time_milsec / 100.0
 
-    def get_velocity(self, t, x,t_0,ActiveTime):
+    def get_velocity(self, t, x, t_0, active_time):
 
-        t= t_0 if ActiveTime else t
+        t= t_0 if active_time else t
         closest_timeStep = min(self.__timeList, key=lambda x: abs(x - t))
         counter = np.where(self.__timeList == closest_timeStep)[0][0]
         currentTimeStep = self.__timeList[counter]
@@ -236,14 +224,14 @@ class windODE:
         return np.array([u_velocity, v_velocity, w_velocity])
 
     def get_index_values(self, x):
-        x_index = x[0] - self.__meshBounds["X_MIN"]
-        if 0 > x_index or x_index > self.__meshBounds["I"]:
+        x_index = (x[0] - self.mesh_extent.x_start)/self.voxalSize['X']
+        if 0 > x_index or x_index > self.mesh.dimension['x']:
             return np.array([0, 0, 0], dtype=int)
-        y_index = x[1] - self.__meshBounds["Y_MIN"]
-        if 0 > y_index or y_index > self.__meshBounds["J"]:
+        y_index =(x[1] - self.mesh_extent.y_start)/self.voxalSize['Y']
+        if 0 > y_index or y_index > self.mesh.dimension['y']:
             return np.array([0, 0, 0], dtype=int)
-        z_index = x[2] - self.__meshBounds["Z_MIN"]
-        if 0 > z_index or z_index > self.__meshBounds["K"]:
+        z_index = (x[2] - self.mesh_extent.z_start)/self.voxalSize['Z']
+        if 0 > z_index or z_index > self.mesh.dimension['z']:
             return np.array([0, 0, 0], dtype=int)
         return np.array([x_index, y_index, z_index], dtype=int)
 
@@ -254,7 +242,6 @@ class windODE:
             (nx, ny, nz) = (header[1], header[2], header[3])
             _ = np.fromfile(f, dtype=np.float32, count=nx * ny * nz)
             data = np.fromfile(f, dtype=np.float32, count=nx * ny * nz * 3)
-
             data = np.reshape(data, (nx, ny, nz, 3), order="F")
         return data
 
@@ -269,15 +256,49 @@ class windODE:
             currentPosition = np.array(
                 [allPositions[0][i], allPositions[1][i], allPositions[2][i]]
             )
+
             deltaTime = allTime[i] - allTime[i - 1]
+            if i ==0:
+                deltaTime = allTime[i]
             squared_dist = np.sum((currentPosition - previousPosition) ** 2, axis=0)
             dist = np.sqrt(squared_dist)
+
             speed = dist / deltaTime
             allSpeeds.append(speed)
             previousPosition = currentPosition
 
         oneDataSet["velocity"] = np.array(allSpeeds)
         return oneDataSet
+
+    def drawPlot(self):
+        fig = plt.figure(figsize=(8, 6))
+
+        ax = fig.add_subplot(1, 1, 1, projection='3d')
+
+        allData = self.timeReasults
+        for time in allData.keys():
+            data = allData[time]
+
+            numberofWindstreams = len(data)
+            lengthofWindStreams = [len(x["y"][0]) for x in data]
+
+            for i in range(numberofWindstreams):
+                x=[]
+                y=[]
+                z=[]
+                currentStream = []
+                for j in range(len(data[i]["y"][0])):
+
+                    x.append(data[i]["y"][0][j])
+                    y.append(data[i]["y"][1][j])
+                    z.append(data[i]["y"][2][j])
+
+
+
+
+                ax.plot(x, y, z)
+
+        plt.show()
 
 
 # %%
@@ -294,14 +315,22 @@ def main(args):
     # t_span = [args[2], args[3]]
     # start_points = args[4:]
 
-    fds_loc = "E:\\fds3\\fds\\trails.fds"
-    dir = "E:\\fds3\\"
+    fds_loc = "/home/trent/fds3/fds/trails.fds"
+    dir = "/home/trent/fds3/"
+    fds_loc = "/home/trent/Trunk/Trunk/Trunk.fds"
+    dir = "/home/trent/Trunk/"
 
-    t_span = [0, 100]
-    start_points = ["X_MIN", "X_MAX"]
+    t_span = [0, 5]
+    start_points = ["X_MIN", "X_MAX","Y_MIN", "Y_MAX",]
 
-    app = windODE(dir, fds_loc, t_span, start_points)
-    app.getMeshBound().getStartingPoints().readInBin().runODE().write2bin("data\\temp")
+    app = windODE(dir, fds_loc, t_span, start_points).getStartingPoints()
+    app.startingPointsRibbon([19,1,	3.5],[ 19,	19,	3.5],40)
+    app.readInBin().runODE(False)
+    #app.write2bin("data//temp")
+    app.drawPlot()
+    app.runODE(True)
+    #app.write2bin("data//temp")
+    app.drawPlot()
 
 
 # %%
