@@ -1,7 +1,8 @@
 import glob
 import numpy as np
+
 fileDir = "/home/trent/TrunkAGL/"
-files = glob.glob(fileDir+"*.sf")
+files = glob.glob(fileDir + "*.sf")
 for file in files:
     with open(file, "rb") as f:
 

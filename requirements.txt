@@ -16,3 +16,6 @@ scipy==1.7.3
 six==1.16.0
 tomli==1.2.3
 typing_extensions==4.0.1
+
+fdsreader~=1.4.1
+pyvista~=0.33.2

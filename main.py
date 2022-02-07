@@ -41,7 +41,9 @@ def main(args):
     app.runParallel()
 
     # Ordinary Differential Equations for wind vectors
-    windODE(fdsOutputDir, fdsInputFile, t_span, starting_points).getMeshBounds().getStartingPoints().readInBin().runODE().write2bin(
+    windODE(
+        fdsOutputDir, fdsInputFile, t_span, starting_points
+    ).getMeshBounds().getStartingPoints().readInBin().runODE().write2bin(
         os.path.join(os.path.join(saveLocation, "wind"), "temp")
     )
 

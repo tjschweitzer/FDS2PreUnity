@@ -7,6 +7,7 @@ import multiprocessing as mp
 import fdsreader as fds
 import pyvista as pv
 
+
 class fdsOutputToUnity:
     def __init__(
         self, fds_output_directory, fds_input_location, save_location, saveType="json"
@@ -29,8 +30,6 @@ class fdsOutputToUnity:
         self.minValues = np.array([np.inf] * self.lenHeaderCountTitles)
         self.maxValues = np.zeros(self.lenHeaderCountTitles)
         self.save_function = self.write2json if saveType == "json" else self.write2bin
-
-
 
     def readInFDS(self):
         with open(self.fds_input_location) as f:
@@ -380,10 +379,12 @@ if __name__ == "__main__":
     pl_t1 = sim.data_3d[t]
 
     # Create 3D grid
-    x_ = np.linspace(extent.x_start, extent.x_end, mesh.dimension['x'])
-    y_ = np.linspace(extent.y_start, extent.y_end, mesh.dimension['y'])  # y_ = np.array([29])
-    z_ = np.linspace(extent.z_start, extent.z_end, mesh.dimension['z'])
-    x, y, z = np.meshgrid(x_, y_, z_, indexing='ij')
+    x_ = np.linspace(extent.x_start, extent.x_end, mesh.dimension["x"])
+    y_ = np.linspace(
+        extent.y_start, extent.y_end, mesh.dimension["y"]
+    )  # y_ = np.array([29])
+    z_ = np.linspace(extent.z_start, extent.z_end, mesh.dimension["z"])
+    x, y, z = np.meshgrid(x_, y_, z_, indexing="ij")
     points = np.stack((x.flatten(), y.flatten(), z.flatten()), axis=1)
 
     # Select a quantity
@@ -397,9 +398,8 @@ if __name__ == "__main__":
 
     # Plot 3D dat
 
-
     startTime = time.time()
-    app = fdsOutputToUnity("E:\\fds3\\", "E:\\fds3\\fds\\trails.fds","" "bin")
+    app = fdsOutputToUnity("E:\\fds3\\", "E:\\fds3\\fds\\trails.fds", "" "bin")
 
     app.findMaxValuesParallel()
     app.runParallel()
