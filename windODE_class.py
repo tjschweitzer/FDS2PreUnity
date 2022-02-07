@@ -2,10 +2,12 @@
 import glob
 import sys
 import time
+import os
 from collections import defaultdict
 import fdsreader as fds
 import matplotlib.pyplot as plt
 import numpy as np
+from  scipy import interpolate
 from scipy.integrate import solve_ivp
 
 
@@ -28,10 +30,9 @@ class windODE:
         :vars self.__directory: directory
         :vars self.__qFiles: list of all plot 3d output files
         :vars self.__timeList: list of all plot 3d time dumps
-        :vars self.__meshBounds: boundaries of entire mesh
         :vars self.__voxalSize: resolution of each voxal
         :vars self.__maxVelocity: maximum velocity of any particle in the streamlines
-        :vars self.startpoints: list of all starting points to be used in the ODE
+        :vars self.startingpoints: list of all starting points to be used in the ODE
 
         """
 
@@ -41,45 +42,57 @@ class windODE:
         self.__directory = directory
         self.__qFiles = glob.glob(directory + "*.q")
         self.__timeList = np.array(self.sim.data_3d.times)
-        self.__meshBounds = {}
         self.__voxalSize = {}
         self.__maxVelocity = 0.0
-        self.startpoints = []
+        self.startingpoints = []
+        self.__meshBounds = self.sim.meshes[0]
+        self.__meshExtent = self.sim.meshes[0].extent
 
-        self.getMeshBounds()
+        self.getVoxalSize()
 
 
 
-    def getMeshBounds(self):
-        self.mesh = self.sim.meshes[0]
-        self.mesh_extent = self.sim.meshes[0].extent
+    def getVoxalSize(self):
+        """
+        Calculates voxal size
+        :return:
+        """
 
-        self.__voxalSize["X"] = (self.mesh_extent.x_end - self.mesh_extent.x_start) / (
-            self.mesh.dimension["x"] - 1
+
+        self.__voxalSize["vx"] = (self.__meshExtent.x_end - self.__meshExtent.x_start) / (
+            self.__meshBounds.dimension["x"] - 1
         )
-        self.__voxalSize["Z"] = (self.mesh_extent.z_end - self.mesh_extent.z_start) / (
-            self.mesh.dimension["z"] - 1
+        self.__voxalSize["vz"] = (self.__meshExtent.z_end - self.__meshExtent.z_start) / (
+            self.__meshBounds.dimension["z"] - 1
         )
-        self.__voxalSize["Y"] = (self.mesh_extent.y_end - self.mesh_extent.y_start) / (
-            self.mesh.dimension["y"] - 1
+        self.__voxalSize["vy"] = (self.__meshExtent.y_end - self.__meshExtent.y_start) / (
+            self.__meshBounds.dimension["y"] - 1
         )
         return self
 
     def getStartingPoints(self):
 
-        X_Min_Value = (
-                self.mesh_extent.x_start + self.__voxalSize["X"] / 2.0
-        )  # Center point of mesh
-        X_Max_Value = (
-                self.mesh_extent.x_end - self.__voxalSize["X"] / 2.0
-        )  # Center point of mesh
-        Y_Min_Value = (
-                self.mesh_extent.y_start + self.__voxalSize["Y"] / 2.0
-        )  # Center point of mesh
-        Y_Max_Value = (
-                self.mesh_extent.y_end - self.__voxalSize["Y"] / 2.0
-        )  # Center point of mesh
+        """
+        Creates a list of points  on the outer most voxals of OBSTS, one point per voxal
+        :var X_Min_Value center point of minimum x voxal
+        :var X_Max_Value center point of maximum x voxal
+        :var Y_Min_Value center point of minimum y voxal
+        :var Y_Max_Value center point of maximum y voxal
 
+        :return:
+        """
+        X_Min_Value = (
+                self.__meshExtent.x_start + self.__voxalSize["vx"] / 2.0
+        )
+        X_Max_Value = (
+                self.__meshExtent.x_end - self.__voxalSize["vx"] / 2.0
+        )
+        Y_Min_Value = (
+                self.__meshExtent.y_start + self.__voxalSize["vy"] / 2.0
+        )
+        Y_Max_Value = (
+                self.__meshExtent.y_end - self.__voxalSize["vy"] / 2.0
+        )
         with open(self.fds_input_location) as f:
             lines = f.readlines()
 
@@ -101,28 +114,28 @@ class windODE:
 
             if XB[0] <= X_Min_Value <= XB[1]:
                 self.startingPointsRibbon(
-                    [XB[0], XB[2], XB[5] + self.__voxalSize["Z"]],
-                    [XB[0], XB[3], XB[5] + self.__voxalSize["Z"]],
-                    int((XB[1] - XB[0]) / self.__voxalSize["X"]),
+                    [XB[0], XB[2], XB[5] + self.__voxalSize["vz"]],
+                    [XB[0], XB[3], XB[5] + self.__voxalSize["vz"]],
+                    int((XB[1] - XB[0]) / self.__voxalSize["vx"]),
                 )
 
             if XB[0] <= X_Max_Value <= XB[1]:
                 self.startingPointsRibbon(
-                    [XB[1], XB[2], XB[5] + self.__voxalSize["Z"]],
-                    [XB[1], XB[3], XB[5] + self.__voxalSize["Z"]],
-                    int((XB[1] - XB[0]) / self.__voxalSize["X"]),
+                    [XB[1], XB[2], XB[5] + self.__voxalSize["vz"]],
+                    [XB[1], XB[3], XB[5] + self.__voxalSize["vz"]],
+                    int((XB[1] - XB[0]) / self.__voxalSize["vx"]),
                 )
             if XB[2] <= Y_Min_Value <= XB[3]:
                 self.startingPointsRibbon(
-                    [XB[0], XB[2], XB[5] + self.__voxalSize["Z"]],
-                    [XB[1], XB[2], XB[5] + self.__voxalSize["Z"]],
-                    int((XB[3] - XB[2]) / self.__voxalSize["Y"]),
+                    [XB[0], XB[2], XB[5] + self.__voxalSize["vz"]],
+                    [XB[1], XB[2], XB[5] + self.__voxalSize["vz"]],
+                    int((XB[3] - XB[2]) / self.__voxalSize["vy"]),
                 )
             if XB[2] <= Y_Max_Value <= XB[3]:
                 self.startingPointsRibbon(
-                    [XB[0], XB[3], XB[5] + self.__voxalSize["Z"]],
-                    [XB[1], XB[3], XB[5] + self.__voxalSize["Z"]],
-                    int((XB[3] - XB[2]) / self.__voxalSize["Y"]),
+                    [XB[0], XB[3], XB[5] + self.__voxalSize["vz"]],
+                    [XB[1], XB[3], XB[5] + self.__voxalSize["vz"]],
+                    int((XB[3] - XB[2]) / self.__voxalSize["vy"]),
                 )
 
         return self
@@ -161,7 +174,7 @@ class windODE:
 
                 if distanceofWindStream > np.min(list(self.__voxalSize.values())) * 2.0:
                     self.distanceofWindStreams_index[time].append(i)
-        print()
+
 
     def startingPointsRibbon(self, starting_pont, ending_point, number_of_points):
         x_ = np.linspace(starting_pont[0], ending_point[0], number_of_points)
@@ -169,7 +182,7 @@ class windODE:
         z_ = np.linspace(starting_pont[2], ending_point[2], number_of_points)
         points = np.stack((x_.flatten(), y_.flatten(), z_.flatten()), axis=1)
 
-        self.startpoints.extend(points)
+        self.startingpoints.extend(points)
         return self
 
     def runODE(self, timedependent=True):
@@ -181,13 +194,14 @@ class windODE:
             closest_timeStep = min(self.__timeList, key=lambda x: abs(x - t_start))
             counter = np.where(self.__timeList == closest_timeStep)[0][0]
             all_results = []
-            for startCounter in range(len(self.startpoints)):
+            for startCounter in range(len(self.startingpoints)):
 
-                y0 = self.startpoints[startCounter]
+                y0 = self.startingpoints[startCounter]
                 t_span = [
                     min(self.__timeList[counter:]),
                     max(self.__timeList[counter:]),
                 ]
+                # rtol=1E-4, atol=1E-6,
                 result_solve_ivp = solve_ivp(
                     self.get_velocity, t_span, y0, args=[t_span[0], timedependent]
                 )
@@ -202,7 +216,8 @@ class windODE:
             self.timeReasults[t_start] = all_results
         return self
 
-    def write2bin(self, fileName):
+    def write2bin(self,desired_directory, file_name_prefix):
+        fileName =os.path.join(desired_directory, file_name_prefix)
         allData = self.timeReasults
         maxVel = self.__maxVelocity
         print(f"Max {maxVel}")
@@ -251,9 +266,6 @@ class windODE:
         vvel_idx = plt_3d_data.get_quantity_index("V-VEL")
         wvel_idx = plt_3d_data.get_quantity_index("W-VEL")
         index_values = self.get_index_values(x)
-
-        # if currentFileName not in self.__memorizedFiles.keys():
-        #     self.__memorizedFiles[currentFileName] = self.read_in_bin(currentFileName)
         u_vel_data = plt_3d_data[mesh].data[:, :, :, uvel_idx]
         u_velocity = u_vel_data[index_values[0], index_values[1], index_values[2]]
         v_vel_data = plt_3d_data[mesh].data[:, :, :, vvel_idx]
@@ -264,26 +276,17 @@ class windODE:
         return np.array([u_velocity, v_velocity, w_velocity])
 
     def get_index_values(self, x):
-        x_index = (x[0] - self.mesh_extent.x_start) / self.__voxalSize["X"]
-        if 0 > x_index or x_index > self.mesh.dimension["x"]:
+        x_index = (x[0] - self.__meshExtent.x_start) / self.__voxalSize["vx"]
+        if 0 > x_index or x_index > self.__meshBounds.dimension["x"]:
             return np.array([0, 0, 0], dtype=int)
-        y_index = (x[1] - self.mesh_extent.y_start) / self.__voxalSize["Y"]
-        if 0 > y_index or y_index > self.mesh.dimension["y"]:
+        y_index = (x[1] - self.__meshExtent.y_start) / self.__voxalSize["vy"]
+        if 0 > y_index or y_index > self.__meshBounds.dimension["y"]:
             return np.array([0, 0, 0], dtype=int)
-        z_index = (x[2] - self.mesh_extent.z_start) / self.__voxalSize["Z"]
-        if 0 > z_index or z_index > self.mesh.dimension["z"]:
+        z_index = (x[2] - self.__meshExtent.z_start) / self.__voxalSize["vz"]
+        if 0 > z_index or z_index > self.__meshBounds.dimension["z"]:
             return np.array([0, 0, 0], dtype=int)
         return np.array([x_index, y_index, z_index], dtype=int)
 
-    def read_in_bin(self, file):
-        with open(file, "rb") as f:
-            header = np.fromfile(f, dtype=np.int32, count=5)
-            _ = np.fromfile(f, dtype=np.float32, count=7)
-            (nx, ny, nz) = (header[1], header[2], header[3])
-            _ = np.fromfile(f, dtype=np.float32, count=nx * ny * nz)
-            data = np.fromfile(f, dtype=np.float32, count=nx * ny * nz * 3)
-            data = np.reshape(data, (nx, ny, nz, 3), order="F")
-        return data
 
     def addVelocity(self, oneDataSet):
         """
@@ -299,14 +302,12 @@ class windODE:
         previousPosition = np.array(
             [allPositions[0][0], allPositions[1][0], allPositions[2][0]]
         )
-        for i in range(len(allPositions[0])):
+        for i in range(1,len(allPositions[0])):
             currentPosition = np.array(
                 [allPositions[0][i], allPositions[1][i], allPositions[2][i]]
             )
 
             deltaTime = allTimes[i] - allTimes[i - 1]
-            if i == 0:
-                deltaTime = allTimes[i]
             squared_dist = np.sum((currentPosition - previousPosition) ** 2, axis=0)
             dist = np.sqrt(squared_dist)
 
@@ -334,6 +335,32 @@ class windODE:
             ax.set_title( f"Starting Time {time}")
             plt.show()
 
+    def compairLines(self):
+        allData = self.timeReasults
+        for time in self.distanceofWindStreams_index.keys():
+
+            plt.figure(figsize=(12, 8))
+            data = allData[time]
+            for i in self.distanceofWindStreams_index[time]:
+
+                x = data[i]["y"][0][:]
+                y = data[i]["y"][1][:]
+                z = data[i]["y"][2][:]
+                xy_est = np.polyfit(x, y,32)
+                yz_est = np.polyfit(y,z,32)
+                plt.subplot(2, 1, 1)
+                plt.plot(x, y, 'o')
+                # evaluate the values for a polynomial
+                plt.plot(x, np.polyval(xy_est, x))
+                plt.subplot(2, 1, 2)
+                plt.plot( y,z, 'o')
+                # evaluate the values for a polynomial
+                plt.plot(y, np.polyval(yz_est, y))
+
+            plt.tight_layout()
+            plt.show()
+
+
 
 # %%
 def main(args):
@@ -354,20 +381,20 @@ def main(args):
     fds_loc = "/home/trent/Trunk/Trunk/Trunk.fds"
     dir = "/home/trent/Trunk/"
 
-    fds_loc = "E:\Trunk\Trunk\Trunk\Trunk.fds"
-    dir = "E:\Trunk\Trunk\\"
+    # fds_loc = "E:\Trunk\Trunk\Trunk\Trunk.fds"
+    # dir = "E:\Trunk\Trunk\\"
 
     t_span = [0, 2]
     start_time = time.perf_counter()
-    app = windODE(dir, fds_loc, t_span).getStartingPoints()
-    # app.startingPointsRibbon([19,1,	3.5],[ 19,	19,	3.5],40)
-    # app.readInBin()\
+    app = windODE(dir, fds_loc, t_span)
+   # app.getStartingPoints()
+    app.startingPointsRibbon([19,1,	3.5],[ 19,	19,	3.5],40)
     app.runODE(timedependent=True)
     app.filterOutStreamsByLength()
-    app.write2bin("data//temp")
+    # app.write2bin("data","temp")
     print(f"Total Time {time.perf_counter()-start_time:0.4f}")
-    app.drawPlot()
-
+    # app.drawPlot()
+    app.compairLines()
 
 # %%
 
