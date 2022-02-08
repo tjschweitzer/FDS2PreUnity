@@ -7,7 +7,7 @@ from collections import defaultdict
 import fdsreader as fds
 import matplotlib.pyplot as plt
 import numpy as np
-from  scipy import interpolate
+from scipy import interpolate
 from scipy.integrate import solve_ivp
 
 
@@ -50,24 +50,21 @@ class windODE:
 
         self.getVoxalSize()
 
-
-
     def getVoxalSize(self):
         """
         Calculates voxal size
         :return:
         """
 
-
-        self.__voxalSize["vx"] = (self.__meshExtent.x_end - self.__meshExtent.x_start) / (
-            self.__meshBounds.dimension["x"] - 1
-        )
-        self.__voxalSize["vz"] = (self.__meshExtent.z_end - self.__meshExtent.z_start) / (
-            self.__meshBounds.dimension["z"] - 1
-        )
-        self.__voxalSize["vy"] = (self.__meshExtent.y_end - self.__meshExtent.y_start) / (
-            self.__meshBounds.dimension["y"] - 1
-        )
+        self.__voxalSize["vx"] = (
+            self.__meshExtent.x_end - self.__meshExtent.x_start
+        ) / (self.__meshBounds.dimension["x"] - 1)
+        self.__voxalSize["vz"] = (
+            self.__meshExtent.z_end - self.__meshExtent.z_start
+        ) / (self.__meshBounds.dimension["z"] - 1)
+        self.__voxalSize["vy"] = (
+            self.__meshExtent.y_end - self.__meshExtent.y_start
+        ) / (self.__meshBounds.dimension["y"] - 1)
         return self
 
     def getStartingPoints(self):
@@ -81,18 +78,10 @@ class windODE:
 
         :return:
         """
-        X_Min_Value = (
-                self.__meshExtent.x_start + self.__voxalSize["vx"] / 2.0
-        )
-        X_Max_Value = (
-                self.__meshExtent.x_end - self.__voxalSize["vx"] / 2.0
-        )
-        Y_Min_Value = (
-                self.__meshExtent.y_start + self.__voxalSize["vy"] / 2.0
-        )
-        Y_Max_Value = (
-                self.__meshExtent.y_end - self.__voxalSize["vy"] / 2.0
-        )
+        X_Min_Value = self.__meshExtent.x_start + self.__voxalSize["vx"] / 2.0
+        X_Max_Value = self.__meshExtent.x_end - self.__voxalSize["vx"] / 2.0
+        Y_Min_Value = self.__meshExtent.y_start + self.__voxalSize["vy"] / 2.0
+        Y_Max_Value = self.__meshExtent.y_end - self.__voxalSize["vy"] / 2.0
         with open(self.fds_input_location) as f:
             lines = f.readlines()
 
@@ -175,7 +164,6 @@ class windODE:
                 if distanceofWindStream > np.min(list(self.__voxalSize.values())) * 2.0:
                     self.distanceofWindStreams_index[time].append(i)
 
-
     def startingPointsRibbon(self, starting_pont, ending_point, number_of_points):
         x_ = np.linspace(starting_pont[0], ending_point[0], number_of_points)
         y_ = np.linspace(starting_pont[1], ending_point[1], number_of_points)
@@ -216,8 +204,8 @@ class windODE:
             self.timeReasults[t_start] = all_results
         return self
 
-    def write2bin(self,desired_directory, file_name_prefix):
-        fileName =os.path.join(desired_directory, file_name_prefix)
+    def write2bin(self, desired_directory, file_name_prefix):
+        fileName = os.path.join(desired_directory, file_name_prefix)
         allData = self.timeReasults
         maxVel = self.__maxVelocity
         print(f"Max {maxVel}")
@@ -287,7 +275,6 @@ class windODE:
             return np.array([0, 0, 0], dtype=int)
         return np.array([x_index, y_index, z_index], dtype=int)
 
-
     def addVelocity(self, oneDataSet):
         """
 
@@ -295,14 +282,14 @@ class windODE:
         :return: same dataset with added velocity information
         """
 
-        allSpeeds = [0.0] # all particles start at 0 velocity
+        allSpeeds = [0.0]  # all particles start at 0 velocity
 
         allTimes = oneDataSet["t"]
         allPositions = oneDataSet["y"]
         previousPosition = np.array(
             [allPositions[0][0], allPositions[1][0], allPositions[2][0]]
         )
-        for i in range(1,len(allPositions[0])):
+        for i in range(1, len(allPositions[0])):
             currentPosition = np.array(
                 [allPositions[0][i], allPositions[1][i], allPositions[2][i]]
             )
@@ -332,7 +319,7 @@ class windODE:
                 y = data[i]["y"][1][:]
                 z = data[i]["y"][2][:]
                 ax.plot(x, y, z)
-            ax.set_title( f"Starting Time {time}")
+            ax.set_title(f"Starting Time {time}")
             plt.show()
 
     def compairLines(self):
@@ -346,20 +333,19 @@ class windODE:
                 x = data[i]["y"][0][:]
                 y = data[i]["y"][1][:]
                 z = data[i]["y"][2][:]
-                xy_est = np.polyfit(x, y,32)
-                yz_est = np.polyfit(y,z,32)
+                xy_est = np.polyfit(x, y, 32)
+                yz_est = np.polyfit(y, z, 32)
                 plt.subplot(2, 1, 1)
-                plt.plot(x, y, 'o')
+                plt.plot(x, y, "o")
                 # evaluate the values for a polynomial
                 plt.plot(x, np.polyval(xy_est, x))
                 plt.subplot(2, 1, 2)
-                plt.plot( y,z, 'o')
+                plt.plot(y, z, "o")
                 # evaluate the values for a polynomial
                 plt.plot(y, np.polyval(yz_est, y))
 
             plt.tight_layout()
             plt.show()
-
 
 
 # %%
@@ -379,7 +365,7 @@ def main(args):
     fds_loc = "/home/trent/fds3/fds/trails.fds"
     dir = "/home/trent/fds3/"
     fds_loc = "/home/trent/Trunk/Trunk/Trunk.fds"
-    dir = "/home/trent/Trunk/"
+    dir = "/home/trent/Trunk/TempCheck"
 
     # fds_loc = "E:\Trunk\Trunk\Trunk\Trunk.fds"
     # dir = "E:\Trunk\Trunk\\"
@@ -387,14 +373,15 @@ def main(args):
     t_span = [0, 2]
     start_time = time.perf_counter()
     app = windODE(dir, fds_loc, t_span)
-   # app.getStartingPoints()
-    app.startingPointsRibbon([19,1,	3.5],[ 19,	19,	3.5],40)
+    # app.getStartingPoints()
+    app.startingPointsRibbon([19, 1, 3.5], [19, 19, 3.5], 40)
     app.runODE(timedependent=True)
     app.filterOutStreamsByLength()
     # app.write2bin("data","temp")
     print(f"Total Time {time.perf_counter()-start_time:0.4f}")
     # app.drawPlot()
     app.compairLines()
+
 
 # %%
 
