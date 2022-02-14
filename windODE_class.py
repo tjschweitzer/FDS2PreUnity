@@ -5,18 +5,21 @@ import time
 import os
 from collections import defaultdict
 import fdsreader as fds
+import matplotlib.pyplot
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy import interpolate
 from scipy.integrate import solve_ivp
 
+from matplotlib import cm
+
 
 class windODE:
     def __init__(
-        self,
-        directory,
-        fds_input_location,
-        t_span,
+            self,
+            directory,
+            fds_input_location,
+            t_span,
     ):
         """
 
@@ -44,6 +47,7 @@ class windODE:
         self.__timeList = np.array(self.sim.data_3d.times)
         self.__voxalSize = {}
         self.__maxVelocity = 0.0
+        self.__maxRe = 0.0
         self.startingpoints = []
         self.__meshBounds = self.sim.meshes[0]
         self.__meshExtent = self.sim.meshes[0].extent
@@ -56,15 +60,15 @@ class windODE:
         :return:
         """
 
-        self.__voxalSize["vx"] = (
-            self.__meshExtent.x_end - self.__meshExtent.x_start
-        ) / (self.__meshBounds.dimension["x"] - 1)
-        self.__voxalSize["vz"] = (
-            self.__meshExtent.z_end - self.__meshExtent.z_start
-        ) / (self.__meshBounds.dimension["z"] - 1)
-        self.__voxalSize["vy"] = (
-            self.__meshExtent.y_end - self.__meshExtent.y_start
-        ) / (self.__meshBounds.dimension["y"] - 1)
+        self.__voxalSize["vx"] = (self.__meshExtent.x_end - self.__meshExtent.x_start) / (
+                self.__meshBounds.dimension["x"] - 1
+        )
+        self.__voxalSize["vz"] = (self.__meshExtent.z_end - self.__meshExtent.z_start) / (
+                self.__meshBounds.dimension["z"] - 1
+        )
+        self.__voxalSize["vy"] = (self.__meshExtent.y_end - self.__meshExtent.y_start) / (
+                self.__meshBounds.dimension["y"] - 1
+        )
         return self
 
     def getStartingPoints(self):
@@ -78,10 +82,18 @@ class windODE:
 
         :return:
         """
-        X_Min_Value = self.__meshExtent.x_start + self.__voxalSize["vx"] / 2.0
-        X_Max_Value = self.__meshExtent.x_end - self.__voxalSize["vx"] / 2.0
-        Y_Min_Value = self.__meshExtent.y_start + self.__voxalSize["vy"] / 2.0
-        Y_Max_Value = self.__meshExtent.y_end - self.__voxalSize["vy"] / 2.0
+        X_Min_Value = (
+                self.__meshExtent.x_start + self.__voxalSize["vx"] / 2.0
+        )
+        X_Max_Value = (
+                self.__meshExtent.x_end - self.__voxalSize["vx"] / 2.0
+        )
+        Y_Min_Value = (
+                self.__meshExtent.y_start + self.__voxalSize["vy"] / 2.0
+        )
+        Y_Max_Value = (
+                self.__meshExtent.y_end - self.__voxalSize["vy"] / 2.0
+        )
         with open(self.fds_input_location) as f:
             lines = f.readlines()
 
@@ -200,7 +212,15 @@ class windODE:
                         f"new max Velocity {current_result_max_vel} changed from {self.__maxVelocity}"
                     )
                     self.__maxVelocity = current_result_max_vel
-                all_results.append(result_with_velocity)
+                result_with_re = self.addReynoldsNumber(result_with_velocity)
+
+                current_result_max_re = np.max(result_with_velocity["re"])
+                if self.__maxRe < current_result_max_re:
+                    print(
+                        f"new max Velocity {current_result_max_re} changed from {self.__maxRe}"
+                    )
+                    self.__maxRe = current_result_max_re
+                all_results.append(result_with_re)
             self.timeReasults[t_start] = all_results
         return self
 
@@ -275,6 +295,28 @@ class windODE:
             return np.array([0, 0, 0], dtype=int)
         return np.array([x_index, y_index, z_index], dtype=int)
 
+    def addReynoldsNumber(self, oneDataSet):
+        """
+
+        :param oneDataSet:
+        :return: same dataset with added velocity information
+        """
+
+        allRe = []  # all particles start at 0 velocity
+
+        allTimes = oneDataSet["t"]
+        allPositions = oneDataSet["y"]
+        for i in range(len(allPositions[0])):
+            currentPosition = np.array(
+                [allPositions[0][i], allPositions[1][i], allPositions[2][i]]
+            )
+
+            currentTime = allTimes[i]
+            allRe.append(self.getRaynoldsNumber(currentPosition, currentTime))
+
+        oneDataSet["re"] = np.array(allRe)
+        return oneDataSet
+
     def addVelocity(self, oneDataSet):
         """
 
@@ -312,14 +354,20 @@ class windODE:
             data = allData[time]
 
             fig = plt.figure(figsize=(8, 6))
-            ax = fig.add_subplot(1, 1, 1, projection="3d")
+            allRE=[]
+            # ax = fig.add_subplot(1, 1, 1, projection="3d")
             for i in self.distanceofWindStreams_index[time]:
-
                 x = data[i]["y"][0][:]
                 y = data[i]["y"][1][:]
                 z = data[i]["y"][2][:]
-                ax.plot(x, y, z)
-            ax.set_title(f"Starting Time {time}")
+                re = data[i]["re"][:]
+                allRE.append(re)
+
+            #     ax.plot(x, y, z,  c=cm.viridis((self.__maxRe-re) / self.__maxRe))
+            #     #ax.plot(x, y, z, )
+            # ax.set_title(f"Starting Time {time}")
+            print()
+            matplotlib.pyplot.hist(np.array(allRE).flatten(), bins='auto')
             plt.show()
 
     def compairLines(self):
@@ -329,23 +377,84 @@ class windODE:
             plt.figure(figsize=(12, 8))
             data = allData[time]
             for i in self.distanceofWindStreams_index[time]:
-
                 x = data[i]["y"][0][:]
                 y = data[i]["y"][1][:]
                 z = data[i]["y"][2][:]
                 xy_est = np.polyfit(x, y, 32)
                 yz_est = np.polyfit(y, z, 32)
                 plt.subplot(2, 1, 1)
-                plt.plot(x, y, "o")
+                plt.plot(x, y, 'o')
                 # evaluate the values for a polynomial
                 plt.plot(x, np.polyval(xy_est, x))
                 plt.subplot(2, 1, 2)
-                plt.plot(y, z, "o")
+                plt.plot(y, z, 'o')
                 # evaluate the values for a polynomial
                 plt.plot(y, np.polyval(yz_est, y))
 
             plt.tight_layout()
             plt.show()
+
+    def showRE(self):
+
+        allData = self.timeReasults
+        for time in self.distanceofWindStreams_index.keys():
+            data = allData[time]
+
+            for i in self.distanceofWindStreams_index[time]:
+                for j in range(len(data[i]["y"][0][:])):
+                    x = data[i]["y"][0][j]
+                    y = data[i]["y"][1][j]
+                    z = data[i]["y"][2][j]
+                    t = data[i]['t'][j]
+                    temp = self.getRaynoldsNumber([x, y, z], t)
+                    print(f"x {x} -  y {y} - z {z} -  RE {temp}")
+            break
+
+    def getRaynoldsNumber(self, x, t):
+        closest_timeStep = min(self.__timeList, key=lambda x: abs(x - t))
+        counter = np.where(self.__timeList == closest_timeStep)[0][0]
+        plt_3d_data = self.sim.data_3d[int(counter)]
+
+        mesh = self.sim.meshes[0]
+        # Select a quantity
+        try:
+            dxeta_idx = plt_3d_data.get_quantity_index("dx/eta")
+        except:
+            return [0]
+        index_values = self.get_index_values(x)
+
+        re_data = plt_3d_data[mesh].data[:, :, :, dxeta_idx]
+        re_value = re_data[index_values[0], index_values[1], index_values[2]]
+
+        return re_value
+
+
+# The Reynolds number is defined as
+
+# Re = uL/ν = ρuL/μ
+
+# where:
+
+# ρ is the density of the fluid (SI units: kg/m3)
+# u is the flow speed (m/s)
+# L is a characteristic linear dimension (m) (see the below sections of this article for examples)
+# μ is the dynamic viscosity of the fluid (Pa·s or N·s/m2 or kg/(m·s))
+# ν is the kinematic viscosity of the fluid (m2/s).
+
+# The Dynamic viscocity coefficient is defined as
+
+# μ = μo*(a/b)*(T/To)3/2
+
+# a = 0.555To + C
+# b = 0.555T + C
+
+# where
+
+# μ  = viscosity in centipoise at input temperature T
+# μ0 = reference viscosity in centipoise at reference temperature To 0.01827
+# T   = input temperature in degrees Rankine
+# T0 = reference temperature in degrees Rankine 524.07
+# C  = Sutherland's constant  = 120
 
 
 # %%
@@ -367,20 +476,20 @@ def main(args):
     fds_loc = "/home/trent/Trunk/Trunk/Trunk.fds"
     dir = "/home/trent/Trunk/TempCheck"
 
-    # fds_loc = "E:\Trunk\Trunk\Trunk\Trunk.fds"
-    # dir = "E:\Trunk\Trunk\\"
+    fds_loc = "E:\Trunk\Trunk\Trunk\Trunk.fds"
+    dir = "E:\Trunk\Trunk\\temp\\"
 
     t_span = [0, 2]
     start_time = time.perf_counter()
     app = windODE(dir, fds_loc, t_span)
-    # app.getStartingPoints()
-    app.startingPointsRibbon([19, 1, 3.5], [19, 19, 3.5], 40)
+    app.getStartingPoints()
+    #app.startingPointsRibbon([19, 1, 3.5], [19, 19, 3.5], 40)
     app.runODE(timedependent=True)
     app.filterOutStreamsByLength()
     # app.write2bin("data","temp")
     print(f"Total Time {time.perf_counter()-start_time:0.4f}")
-    # app.drawPlot()
-    app.compairLines()
+    app.drawPlot()
+    #app.compairLines()
 
 
 # %%
