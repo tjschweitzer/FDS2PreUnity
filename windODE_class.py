@@ -8,7 +8,9 @@ import fdsreader as fds
 import matplotlib.pyplot
 import matplotlib.pyplot as plt
 import numpy as np
-from scipy import interpolate
+from scipy import interpolate,signal
+
+
 from scipy.integrate import solve_ivp
 
 from matplotlib import cm
@@ -355,60 +357,38 @@ class windODE:
 
             fig = plt.figure(figsize=(8, 6))
             allRE=[]
-            # ax = fig.add_subplot(1, 1, 1, projection="3d")
+            ax = fig.add_subplot(1, 1, 1, projection="3d")
             for i in self.distanceofWindStreams_index[time]:
                 x = data[i]["y"][0][:]
                 y = data[i]["y"][1][:]
                 z = data[i]["y"][2][:]
                 re = data[i]["re"][:]
                 allRE.append(re)
-
-            #     ax.plot(x, y, z,  c=cm.viridis((self.__maxRe-re) / self.__maxRe))
-            #     #ax.plot(x, y, z, )
-            # ax.set_title(f"Starting Time {time}")
-            print()
-            matplotlib.pyplot.hist(np.array(allRE).flatten(), bins='auto')
+                if ((self.__maxRe-np.max(re)) / self.__maxRe)>0.33:
+                    ax.plot(x, y, z, c=cm.binary(1))
+                    continue
+                ax.plot(x, y, z,  c=cm.viridis((((self.__maxRe-np.max(re)) / self.__maxRe)+.1)/0.43))
             plt.show()
+            allRe= np.hstack(allRE)
+            print(f"Re Values min  {np.min(allRe)}  max  {np.max(allRe)} std Dev {np.std(allRe)}  mean {np.mean(allRe)}")
 
-    def compairLines(self):
-        allData = self.timeReasults
-        for time in self.distanceofWindStreams_index.keys():
 
-            plt.figure(figsize=(12, 8))
-            data = allData[time]
-            for i in self.distanceofWindStreams_index[time]:
-                x = data[i]["y"][0][:]
-                y = data[i]["y"][1][:]
-                z = data[i]["y"][2][:]
-                xy_est = np.polyfit(x, y, 32)
-                yz_est = np.polyfit(y, z, 32)
-                plt.subplot(2, 1, 1)
-                plt.plot(x, y, 'o')
-                # evaluate the values for a polynomial
-                plt.plot(x, np.polyval(xy_est, x))
-                plt.subplot(2, 1, 2)
-                plt.plot(y, z, 'o')
-                # evaluate the values for a polynomial
-                plt.plot(y, np.polyval(yz_est, y))
 
-            plt.tight_layout()
-            plt.show()
+    def getRaynoldsMatrix(self,t):
+        closest_timeStep = min(self.__timeList, key=lambda x: abs(x - t))
+        counter = np.where(self.__timeList == closest_timeStep)[0][0]
+        plt_3d_data = self.sim.data_3d[int(counter)]
 
-    def showRE(self):
+        mesh = self.sim.meshes[0]
+        # Select a quantity
+        try:
+            dxeta_idx = plt_3d_data.get_quantity_index("dx/eta")
+        except:
+            return [0]
 
-        allData = self.timeReasults
-        for time in self.distanceofWindStreams_index.keys():
-            data = allData[time]
+        re_data = plt_3d_data[mesh].data[:, :, :, dxeta_idx]
 
-            for i in self.distanceofWindStreams_index[time]:
-                for j in range(len(data[i]["y"][0][:])):
-                    x = data[i]["y"][0][j]
-                    y = data[i]["y"][1][j]
-                    z = data[i]["y"][2][j]
-                    t = data[i]['t'][j]
-                    temp = self.getRaynoldsNumber([x, y, z], t)
-                    print(f"x {x} -  y {y} - z {z} -  RE {temp}")
-            break
+        return re_data
 
     def getRaynoldsNumber(self, x, t):
         closest_timeStep = min(self.__timeList, key=lambda x: abs(x - t))
@@ -428,6 +408,12 @@ class windODE:
 
         return re_value
 
+    def getDataFromTime(self,t):
+        if t in self.timeReasults.keys():
+            return self.timeReasults[t]
+        return []
+    def getMaxRE(self):
+        return self.__maxRe
 
 # The Reynolds number is defined as
 
@@ -476,8 +462,8 @@ def main(args):
     fds_loc = "/home/trent/Trunk/Trunk/Trunk.fds"
     dir = "/home/trent/Trunk/TempCheck"
 
-    fds_loc = "E:\Trunk\Trunk\Trunk\Trunk.fds"
-    dir = "E:\Trunk\Trunk\\temp\\"
+    # fds_loc = "E:\Trunk\Trunk\Trunk\Trunk.fds"
+    # dir = "E:\Trunk\Trunk\\temp\\"
 
     t_span = [0, 2]
     start_time = time.perf_counter()
@@ -490,7 +476,34 @@ def main(args):
     print(f"Total Time {time.perf_counter()-start_time:0.4f}")
     app.drawPlot()
     #app.compairLines()
+    testData = app.getRaynoldsMatrix(0.51)
+    test = signal.argrelextrema(testData, np.greater, axis=1)
+    print(np.array(testData).shape)
+    for i in test:
+        print(len(i), type(i), i)
 
+    # Creating figure
+    fig = plt.figure(figsize=(10, 7))
+    ax = plt.axes(projection="3d")
+    # Creating color map
+    my_cmap = plt.get_cmap('hsv')
+
+    x = test[0][test[2]>20]
+    y = test[1][test[2]>20]
+    z = test[2][test[2]>20]
+
+    # Creating plot
+    cvals = []
+    for i in range(len(x)):
+        cvals.append(testData[x[i]][y[i]][z[i]])
+    ax.scatter3D(x, y, z, alpha=0.8,
+                 c=cvals,
+                 cmap=my_cmap,
+                 marker='^')
+    plt.title("simple 3D scatter plot")
+
+    # show plot
+    plt.show()
 
 # %%
 
