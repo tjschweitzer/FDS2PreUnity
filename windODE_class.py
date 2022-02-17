@@ -50,6 +50,7 @@ class windODE:
         self.__voxalSize = {}
         self.__maxVelocity = 0.0
         self.__maxRe = 0.0
+        self.__REDict={}
         self.startingpoints = []
         self.__meshBounds = self.sim.meshes[0]
         self.__meshExtent = self.sim.meshes[0].extent
@@ -196,6 +197,7 @@ class windODE:
             closest_timeStep = min(self.__timeList, key=lambda x: abs(x - t_start))
             counter = np.where(self.__timeList == closest_timeStep)[0][0]
             all_results = []
+            self.__REDict[self.__timeList[counter]]=[]
             for startCounter in range(len(self.startingpoints)):
 
                 y0 = self.startingpoints[startCounter]
@@ -217,9 +219,10 @@ class windODE:
                 result_with_re = self.addReynoldsNumber(result_with_velocity)
 
                 current_result_max_re = np.max(result_with_velocity["re"])
+                self.__REDict[self.__timeList[counter]].append(current_result_max_re)
                 if self.__maxRe < current_result_max_re:
                     print(
-                        f"new max Velocity {current_result_max_re} changed from {self.__maxRe}"
+                        f"new max RE {current_result_max_re} changed from {self.__maxRe}"
                     )
                     self.__maxRe = current_result_max_re
                 all_results.append(result_with_re)
@@ -356,57 +359,103 @@ class windODE:
             data = allData[time]
 
             fig = plt.figure(figsize=(8, 6))
-            allRE=[]
+            current_max_RE = np.percentile(self.__REDict[time],.50)
+            maxRE= np.max(np.array(self.__REDict[time]))
             ax = fig.add_subplot(1, 1, 1, projection="3d")
+            counter = 0
             for i in self.distanceofWindStreams_index[time]:
                 x = data[i]["y"][0][:]
                 y = data[i]["y"][1][:]
                 z = data[i]["y"][2][:]
                 re = data[i]["re"][:]
-                allRE.append(re)
-                if ((self.__maxRe-np.max(re)) / self.__maxRe)>0.33:
-                    ax.plot(x, y, z, c=cm.binary(1))
-                    continue
-                ax.plot(x, y, z,  c=cm.viridis((((self.__maxRe-np.max(re)) / self.__maxRe)+.1)/0.43))
+
+                temp =np.max(re)/maxRE
+                ax.plot(x, y, z,  c=cm.magma(temp))
+            print(f" {counter} out of {len(data[i]['y'][0])}")
             plt.show()
-            allRe= np.hstack(allRE)
-            print(f"Re Values min  {np.min(allRe)}  max  {np.max(allRe)} std Dev {np.std(allRe)}  mean {np.mean(allRe)}")
+            return
 
-
+    def getClosestTimeStepIndex(self,t):
+        closest_timeStep_value = min(self.__timeList, key=lambda x: abs(x - t))
+        closest_timeStep_index = np.where(self.__timeList == closest_timeStep_value)[0][0]
+        return int(closest_timeStep_index)
 
     def getRaynoldsMatrix(self,t):
-        closest_timeStep = min(self.__timeList, key=lambda x: abs(x - t))
-        counter = np.where(self.__timeList == closest_timeStep)[0][0]
-        plt_3d_data = self.sim.data_3d[int(counter)]
+        time_step_index = self.getClosestTimeStepIndex(t)
+        plt_3d_data = self.sim.data_3d[time_step_index]
 
         mesh = self.sim.meshes[0]
         # Select a quantity
         try:
             dxeta_idx = plt_3d_data.get_quantity_index("dx/eta")
         except:
-            return [0]
+            print("dx/eta plot 3d data ot found ")
+            return []
 
         re_data = plt_3d_data[mesh].data[:, :, :, dxeta_idx]
 
         return re_data
 
     def getRaynoldsNumber(self, x, t):
-        closest_timeStep = min(self.__timeList, key=lambda x: abs(x - t))
-        counter = np.where(self.__timeList == closest_timeStep)[0][0]
-        plt_3d_data = self.sim.data_3d[int(counter)]
+        mesh = 0
+        re_data = self.getRaynoldsMatrix(t)
+        if len(re_data)==0:
+            return
 
-        mesh = self.sim.meshes[0]
-        # Select a quantity
-        try:
-            dxeta_idx = plt_3d_data.get_quantity_index("dx/eta")
-        except:
-            return [0]
         index_values = self.get_index_values(x)
-
-        re_data = plt_3d_data[mesh].data[:, :, :, dxeta_idx]
         re_value = re_data[index_values[0], index_values[1], index_values[2]]
 
         return re_value
+
+    def evaluateRaynoldsValues(self,t):
+        values = defaultdict(lambda : 0)
+        for t in self.__timeList:
+            current_Re_values = self.getRaynoldsMatrix(t)
+            flatten_values =flatten_values_sorted  = np.array(current_Re_values,dtype=np.float64).flatten()
+            flatten_values_list = np.array(list(set(flatten_values)),dtype=np.float64)
+            flatten_values_sorted= list(np.sort(flatten_values_sorted))
+            Re_percentile_min = np.percentile(flatten_values,99.5)
+            ranking = {}
+            for i in range(len(flatten_values_sorted)):
+                ranking[flatten_values[i]]=i
+
+            for i in range(current_Re_values.shape[0]):
+                t=current_Re_values[i,:,:]
+                for j in range(current_Re_values.shape[1]):
+                    t2 = current_Re_values[i, j, :]
+                    for k in range(current_Re_values.shape[2]):
+                        if current_Re_values[i,j,k] >=Re_percentile_min:
+                            values[f"{i},{j},{k}"] += ranking[current_Re_values[i,j,k]]
+
+            print(f" org length {len(flatten_values)} lisat length {len(flatten_values_list)}  {len(flatten_values_list)/len(flatten_values)*100}% ")
+
+            print(len(flatten_values_list[flatten_values_list>=Re_percentile_min])/len(flatten_values)*100)
+
+
+        print(np.max(list(values.values())))
+        fig = plt.figure(figsize=(10, 7))
+        ax = plt.axes(projection="3d")
+        max_value = np.max(list(values.values()))
+        x=[]
+        y=[]
+        z=[]
+        c=[]
+        for key in list(values.keys()):
+            x_k,y_k,z_k = key.split(',')
+            x.append(int(x_k))
+            y.append(int(y_k))
+            z.append(int(z_k))
+            value = float(values[key])
+            c.append(values[key]/max_value)
+            # plt.scatter(int(x_k), int(y_k), int(z_k))
+
+
+        scatter_plot=ax.scatter3D(x,y,z,c=cm.magma(c))
+
+        plt.colorbar(scatter_plot)
+
+        plt.show()
+
 
     def getDataFromTime(self,t):
         if t in self.timeReasults.keys():
@@ -462,48 +511,54 @@ def main(args):
     fds_loc = "/home/trent/Trunk/Trunk/Trunk.fds"
     dir = "/home/trent/Trunk/TempCheck"
 
-    # fds_loc = "E:\Trunk\Trunk\Trunk\Trunk.fds"
-    # dir = "E:\Trunk\Trunk\\temp\\"
+    fds_loc = "E:\Trunk\Trunk\Trunk\Trunk.fds"
+    dir = "E:\Trunk\Trunk\\temp\\"
 
     t_span = [0, 2]
     start_time = time.perf_counter()
     app = windODE(dir, fds_loc, t_span)
+    app.evaluateRaynoldsValues(0.51)
+
+
     app.getStartingPoints()
     #app.startingPointsRibbon([19, 1, 3.5], [19, 19, 3.5], 40)
     app.runODE(timedependent=True)
     app.filterOutStreamsByLength()
     # app.write2bin("data","temp")
+
     print(f"Total Time {time.perf_counter()-start_time:0.4f}")
     app.drawPlot()
-    #app.compairLines()
-    testData = app.getRaynoldsMatrix(0.51)
-    test = signal.argrelextrema(testData, np.greater, axis=1)
-    print(np.array(testData).shape)
-    for i in test:
-        print(len(i), type(i), i)
-
-    # Creating figure
-    fig = plt.figure(figsize=(10, 7))
-    ax = plt.axes(projection="3d")
-    # Creating color map
-    my_cmap = plt.get_cmap('hsv')
-
-    x = test[0][test[2]>20]
-    y = test[1][test[2]>20]
-    z = test[2][test[2]>20]
-
-    # Creating plot
-    cvals = []
-    for i in range(len(x)):
-        cvals.append(testData[x[i]][y[i]][z[i]])
-    ax.scatter3D(x, y, z, alpha=0.8,
-                 c=cvals,
-                 cmap=my_cmap,
-                 marker='^')
-    plt.title("simple 3D scatter plot")
-
-    # show plot
-    plt.show()
+    # return
+    #
+    # #app.compairLines()
+    # testData = app.getRaynoldsMatrix(0.51)
+    # test = signal.argrelextrema(testData, np.greater, axis=1)
+    # print(np.array(testData).shape)
+    # for i in test:
+    #     print(len(i), type(i), i)
+    #
+    # # Creating figure
+    # fig = plt.figure(figsize=(10, 7))
+    # ax = plt.axes(projection="3d")
+    # # Creating color map
+    # my_cmap = plt.get_cmap('hsv')
+    #
+    # x = test[0][test[2]]
+    # y = test[1][test[2]]
+    # z = test[2][test[2]]
+    #
+    # # Creating plot
+    # cvals = []
+    # for i in range(len(x)):
+    #     cvals.append(testData[x[i]][y[i]][z[i]])
+    # ax.scatter3D(x, y, z, alpha=0.8,
+    #              c=cvals,
+    #              cmap=my_cmap,
+    #              marker='^')
+    # plt.title("simple 3D scatter plot")
+    #
+    # # show plot
+    # plt.show()
 
 # %%
 
