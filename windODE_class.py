@@ -74,6 +74,16 @@ class windODE:
         )
         return self
 
+    def getPositionFromIndex(self,x):
+        x_index = x[0]
+        y_index = x[1]
+        z_index = x[2]
+        print(self.__meshExtent)
+        x_position = self.__meshExtent.x_start + x_index*self.__voxalSize["vx"]
+        y_position = self.__meshExtent.y_start + y_index*self.__voxalSize["vy"]
+        z_position = self.__meshExtent.z_start + z_index*self.__voxalSize["vz"]
+        return [x_position,y_position,z_position]
+
     def getStartingPoints(self):
 
         """
@@ -205,9 +215,11 @@ class windODE:
                     min(self.__timeList[counter:]),
                     max(self.__timeList[counter:]),
                 ]
+                t_0 = t_span[0]
+                t_span = t_span if timedependent else self.__timeList-t_0
                 # rtol=1E-4, atol=1E-6,
                 result_solve_ivp = solve_ivp(
-                    self.get_velocity, t_span, y0, args=[t_span[0], timedependent]
+                    self.get_velocity, t_span, y0, args=[t_0, timedependent]
                 )
                 result_with_velocity = self.addVelocity(result_solve_ivp)
                 current_result_max_vel = np.max(result_with_velocity["velocity"])
@@ -266,9 +278,9 @@ class windODE:
                 print(fileName, "saved")
         return self
 
-    def get_velocity(self, t, x, t_0, timedependent):
+    def get_velocity(self, t, x, t_0, reverse_intergration):
 
-        t = t if timedependent else t_0
+        t = t if reverse_intergration else t_0+t
         closest_timeStep = min(self.__timeList, key=lambda x: abs(x - t))
         counter = np.where(self.__timeList == closest_timeStep)[0][0]
         plt_3d_data = self.sim.data_3d[int(counter)]
@@ -364,16 +376,20 @@ class windODE:
             ax = fig.add_subplot(1, 1, 1, projection="3d")
             counter = 0
             for i in self.distanceofWindStreams_index[time]:
+                print(data[i]['t'])
                 x = data[i]["y"][0][:]
                 y = data[i]["y"][1][:]
                 z = data[i]["y"][2][:]
                 re = data[i]["re"][:]
 
                 temp =np.max(re)/maxRE
-                ax.plot(x, y, z,  c=cm.magma(temp))
+                ax.plot(x, y, z,  c=cm.viridis(temp))
+
             print(f" {counter} out of {len(data[i]['y'][0])}")
+
+
             plt.show()
-            return
+
 
     def getClosestTimeStepIndex(self,t):
         closest_timeStep_value = min(self.__timeList, key=lambda x: abs(x - t))
@@ -409,7 +425,7 @@ class windODE:
 
     def evaluateRaynoldsValues(self,t):
         values = defaultdict(lambda : 0)
-        for t in self.__timeList:
+        for t in self.__timeList[3:6]:
             current_Re_values = self.getRaynoldsMatrix(t)
             flatten_values =flatten_values_sorted  = np.array(current_Re_values,dtype=np.float64).flatten()
             flatten_values_list = np.array(list(set(flatten_values)),dtype=np.float64)
@@ -425,9 +441,9 @@ class windODE:
                     t2 = current_Re_values[i, j, :]
                     for k in range(current_Re_values.shape[2]):
                         if current_Re_values[i,j,k] >=Re_percentile_min:
-                            values[f"{i},{j},{k}"] += ranking[current_Re_values[i,j,k]]
+                            values[f"{i},{j},{k}"] += current_Re_values[i,j,k]
 
-            print(f" org length {len(flatten_values)} lisat length {len(flatten_values_list)}  {len(flatten_values_list)/len(flatten_values)*100}% ")
+            print(f" org length {len(flatten_values)} list length {len(flatten_values_list)}  {len(flatten_values_list)/len(flatten_values)*100}% ")
 
             print(len(flatten_values_list[flatten_values_list>=Re_percentile_min])/len(flatten_values)*100)
 
@@ -435,32 +451,67 @@ class windODE:
         print(np.max(list(values.values())))
         fig = plt.figure(figsize=(10, 7))
         ax = plt.axes(projection="3d")
-        max_value = np.max(list(values.values()))
+        max_value = np.percentile(list(values.values()),70)
         x=[]
         y=[]
         z=[]
         c=[]
         for key in list(values.keys()):
+            if values[key]< max_value:
+                continue
             x_k,y_k,z_k = key.split(',')
             x.append(int(x_k))
             y.append(int(y_k))
             z.append(int(z_k))
             value = float(values[key])
-            c.append(values[key]/max_value)
-            # plt.scatter(int(x_k), int(y_k), int(z_k))
+            c.append(value)
 
+        # Creating color map
+        my_cmap = plt.get_cmap('viridis')
 
-        scatter_plot=ax.scatter3D(x,y,z,c=cm.magma(c))
+        scatter_plot=ax.scatter3D(x,y,z,c=c,cmap=my_cmap)
 
         plt.colorbar(scatter_plot)
 
         plt.show()
+
+        highest_re_Points = []
+        c_sorted = sorted(c)
+        for i in range(len(c)):
+            highest_re_Points.append(c.index(c_sorted[i]))
+
+        fig = plt.figure(figsize=(10, 7))
+        ax = plt.axes(projection="3d")
+        x_1 = []
+        y_1 = []
+        z_1 = []
+        c_1 = []
+        for key in highest_re_Points[-200:]:
+            x_1.append(x[key])
+            y_1.append(y[key])
+            z_1.append(z[key])
+            value = float(c[key])
+            c_1.append(value)
+
+        # Creating color map
+        my_cmap = plt.get_cmap('viridis')
+        scatter_plot = ax.scatter3D(x_1, y_1, z_1, c=c_1, cmap=my_cmap)
+        plt.colorbar(scatter_plot)
+        plt.show()
+
+        points_of_interest_index = [ [x_1[i],y_1[i],z_1[i]] for i in range(len(x_1))]
+        points_of_interest_position = [ self.getPositionFromIndex([x_1[i],y_1[i],z_1[i]]) for i in range(len(x_1))]
+        for i in range(len(points_of_interest_position)):
+            print(points_of_interest_index[i],points_of_interest_position[i])
+
+        self.startingpoints.extend(points_of_interest_position)
 
 
     def getDataFromTime(self,t):
         if t in self.timeReasults.keys():
             return self.timeReasults[t]
         return []
+
     def getMaxRE(self):
         return self.__maxRe
 
@@ -508,59 +559,30 @@ def main(args):
 
     fds_loc = "/home/trent/fds3/fds/trails.fds"
     dir = "/home/trent/fds3/"
-    fds_loc = "/home/trent/Trunk/Trunk/Trunk.fds"
-    dir = "/home/trent/Trunk/TempCheck"
+    fds_loc = "/home/kl3pt0/Trunk/Trunk/Trunk.fds"
+    dir = "/home/kl3pt0/Trunk/Fire"
+    #
+    # fds_loc = "E:\Trunk\Trunk\Trunk\Trunk.fds"
+    # dir = "E:\Trunk\Trunk\\temp\\"
 
-    fds_loc = "E:\Trunk\Trunk\Trunk\Trunk.fds"
-    dir = "E:\Trunk\Trunk\\temp\\"
-
-    t_span = [0, 2]
+    t_span = [15,16]
     start_time = time.perf_counter()
     app = windODE(dir, fds_loc, t_span)
-    app.evaluateRaynoldsValues(0.51)
+    # app.evaluateRaynoldsValues(0.51)
 
 
-    app.getStartingPoints()
-    #app.startingPointsRibbon([19, 1, 3.5], [19, 19, 3.5], 40)
-    app.runODE(timedependent=True)
+    # app.getStartingPoints()
+    app.startingPointsRibbon([19, 1, 3.5], [1, 19, 3.5], 40)
+    app.startingpoints = [[10,10,3]]
+    app.runODE(timedependent=False)
+
     app.filterOutStreamsByLength()
     # app.write2bin("data","temp")
 
     print(f"Total Time {time.perf_counter()-start_time:0.4f}")
     app.drawPlot()
-    # return
-    #
-    # #app.compairLines()
-    # testData = app.getRaynoldsMatrix(0.51)
-    # test = signal.argrelextrema(testData, np.greater, axis=1)
-    # print(np.array(testData).shape)
-    # for i in test:
-    #     print(len(i), type(i), i)
-    #
-    # # Creating figure
-    # fig = plt.figure(figsize=(10, 7))
-    # ax = plt.axes(projection="3d")
-    # # Creating color map
-    # my_cmap = plt.get_cmap('hsv')
-    #
-    # x = test[0][test[2]]
-    # y = test[1][test[2]]
-    # z = test[2][test[2]]
-    #
-    # # Creating plot
-    # cvals = []
-    # for i in range(len(x)):
-    #     cvals.append(testData[x[i]][y[i]][z[i]])
-    # ax.scatter3D(x, y, z, alpha=0.8,
-    #              c=cvals,
-    #              cmap=my_cmap,
-    #              marker='^')
-    # plt.title("simple 3D scatter plot")
-    #
-    # # show plot
-    # plt.show()
+    print()
 
-# %%
 
 if __name__ == "__main__":
     main(sys.argv[1:])
