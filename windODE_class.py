@@ -52,7 +52,7 @@ class windODE:
         self.__voxalSize = {}
         self.__maxVelocity = 0.0
         self.__maxRe = 0.0
-        self.__REDict={}
+        self.__REDict=defaultdict(lambda : [])
         self.startingpoints = []
         self.__meshBounds = self.sim.meshes[0]
         self.__meshExtent = self.sim.meshes[0].extent
@@ -199,68 +199,85 @@ class windODE:
         self.startingpoints.extend(points)
         return self
 
-    def runODE(self, reverse_integration=True):
+    def runODE(self,time_step_index,reverse_integration=False):
+        t_span = [
+            min(self.__timeList[time_step_index:]),
+            max(self.__timeList[time_step_index:]),
+        ]
+        current_results=[]
+
+        if reverse_integration:
+            t_span[1] = 0.0
+
+        for startCounter in range(len(self.startingpoints)):
+            y0 = self.startingpoints[startCounter]
+
+            result_solve_ivp = solve_ivp(
+                self.get_velocity, t_span, y0,
+                # rtol=1E-4, atol=1E-6,
+            )
+            result_with_velocity = self.addVelocity(result_solve_ivp)
+            current_result_max_vel = np.max(result_with_velocity["velocity"])
+            if self.__maxVelocity < current_result_max_vel:
+                print(
+                    f"new max Velocity {current_result_max_vel} changed from {self.__maxVelocity}"
+                )
+                self.__maxVelocity = current_result_max_vel
+
+            result_with_re = self.addReynoldsNumber(result_with_velocity)
+            current_result_max_re = np.max(result_with_re["re"])
+            self.__REDict[self.__timeList[time_step_index]].append(current_result_max_re)
+            if self.__maxRe < current_result_max_re:
+                print(
+                    f"new max RE {current_result_max_re} changed from {self.__maxRe}"
+                )
+                self.__maxRe = current_result_max_re
+            current_results.append(result_with_re)
+        return current_results
+
+    def StartODE(self, reverse_integration=True):
 
         self.timeReasults = {}
         for t_start in self.__timeList:
+            print(t_start,end=' - ')
             if t_start > self.t_span[1] or t_start < self.t_span[0]:
                 continue
-            counter = self.getClosestTimeStepIndex(t_start)
-            all_results = []
-            self.__REDict[self.__timeList[counter]]=[]
-            for startCounter in range(len(self.startingpoints)):
+            time_step_index = self.__GetClosestTimeStepIndex(t_start)
 
-                y0 = self.startingpoints[startCounter]
-                t_span = [
-                    min(self.__timeList[counter:]),
-                    max(self.__timeList[counter:]),
-                ]
-                t_0 = t_span[0]
-                result_solve_ivp = solve_ivp(
-                    self.get_velocity, t_span, y0, args=[t_0, reverse_integration]
-                )
-                result_with_velocity = self.addVelocity(result_solve_ivp)
-                current_result_max_vel = np.max(result_with_velocity["velocity"])
-                if self.__maxVelocity < current_result_max_vel:
-                    print(
-                        f"new max Velocity {current_result_max_vel} changed from {self.__maxVelocity}"
-                    )
-                    self.__maxVelocity = current_result_max_vel
-                result_with_re = self.addReynoldsNumber(result_with_velocity)
-
-                current_result_max_re = np.max(result_with_velocity["re"])
-                self.__REDict[self.__timeList[counter]].append(current_result_max_re)
-                if self.__maxRe < current_result_max_re:
-                    print(
-                        f"new max RE {current_result_max_re} changed from {self.__maxRe}"
-                    )
-                    self.__maxRe = current_result_max_re
-                all_results.append(result_with_re)
-                if reverse_integration:
-                    # rtol=1E-4, atol=1E-6,
-                    t_span = [t_0,0]
-                    result_solve_ivp = solve_ivp(
-                        self.get_velocity, t_span, y0, args=[t_0, reverse_integration]
-                    )
-                    result_with_velocity = self.addVelocity(result_solve_ivp)
-                    current_result_max_vel = np.max(result_with_velocity["velocity"])
-                    if self.__maxVelocity < current_result_max_vel:
-                        print(
-                            f"new max Velocity {current_result_max_vel} changed from {self.__maxVelocity}"
-                        )
-                        self.__maxVelocity = current_result_max_vel
-                    result_with_re = self.addReynoldsNumber(result_with_velocity)
-
-                    current_result_max_re = np.max(result_with_velocity["re"])
-                    self.__REDict[self.__timeList[counter]].append(current_result_max_re)
-                    if self.__maxRe < current_result_max_re:
-                        print(
-                            f"new max RE {current_result_max_re} changed from {self.__maxRe}"
-                        )
-                        self.__maxRe = current_result_max_re
-                    all_results.append(result_with_re)
+            all_results=self.runODE(time_step_index)
+            if reverse_integration:
+                backward = self.runODE(time_step_index,True)
+                all_results= self.combineODEFrames(all_results,backward)
             self.timeReasults[t_start] = all_results
+            print()
         return self
+
+    def combineODEFrames(self, all_forward_data,all_backwards_data):
+        return_values = all_backwards_data
+        for i in range(len(all_backwards_data)):
+            backwards_data = all_backwards_data[i]
+            forward_data = all_forward_data[i]
+            return_values[i]['t'] = backwards_data['t'][::-1]
+            return_values[i]['y'][0] = backwards_data['y'][0][::-1]
+            return_values[i]['y'][1] = backwards_data['y'][1][::-1]
+            return_values[i]['y'][2] = backwards_data['y'][2][::-1]
+            return_values[i]['velocity'] = backwards_data['velocity'][::-1] * -1
+            return_values[i]['re'] = backwards_data['re'][::-1]
+
+
+            return_values[i]['t']= np.concatenate((backwards_data['t'], forward_data['t'][1:]))
+            print(return_values[i]['y'][0])
+            print(forward_data['y'][0])
+            y_=[np.concatenate((backwards_data['y'][0],forward_data['y'][0][1:])),
+              np.concatenate((backwards_data['y'][1],forward_data['y'][1][1:])),
+              np.concatenate((backwards_data['y'][2],forward_data['y'][2][1:]))]
+            return_values[i]['y']=y_
+            return_values[i]['velocity']=np.concatenate((backwards_data['velocity'],forward_data['velocity'][1:]))
+
+            return_values[i]['re']=np.concatenate((backwards_data['re'], forward_data['re'][1:]))
+
+        return return_values
+
 
     def write2bin(self, desired_directory, file_name_prefix):
         fileName = os.path.join(desired_directory, file_name_prefix)
@@ -299,12 +316,10 @@ class windODE:
                 print(fileName, "saved")
         return self
 
-    def get_velocity(self, t, x, t_0, reverse_intergration):
+    def get_velocity(self, t, x):
 
-
-        closest_timeStep = min(self.__timeList, key=lambda x: abs(x - t))
-        counter = np.where(self.__timeList == closest_timeStep)[0][0]
-        plt_3d_data = self.sim.data_3d[int(counter)]
+        counter = self.__GetClosestTimeStepIndex(t)
+        plt_3d_data = self.sim.data_3d[counter]
 
         mesh = self.sim.meshes[0]
         # Select a quantity
@@ -350,7 +365,7 @@ class windODE:
             )
 
             currentTime = allTimes[i]
-            allRe.append(self.getRaynoldsNumber(currentPosition, currentTime))
+            allRe.append(self.__GetReynoldsNumber(currentPosition, currentTime))
 
         oneDataSet["re"] = np.array(allRe)
         return oneDataSet
@@ -388,16 +403,11 @@ class windODE:
         return oneDataSet
 
     def drawPlot(self):
-
-        allData = self.timeReasults
         for time in self.distanceofWindStreams_index.keys():
-            data = allData[time]
-
-            fig = plt.figure(figsize=(8, 6))
-            current_max_RE = np.percentile(self.__REDict[time],.50)
+            data = self.timeReasults[time]
             maxRE= np.max(np.array(self.__REDict[time]))
+            fig = plt.figure(figsize=(8, 6))
             ax = fig.add_subplot(1, 1, 1, projection="3d")
-            counter = 0
             for i in self.distanceofWindStreams_index[time]:
                 print(data[i]['t'])
                 x = data[i]["y"][0][:]
@@ -407,20 +417,16 @@ class windODE:
 
                 temp =np.max(re)/maxRE
                 ax.plot(x, y, z,  c=cm.viridis(temp))
-
-            print(f" {counter} out of {len(data[i]['y'][0])}")
-
-
             plt.show()
 
 
-    def getClosestTimeStepIndex(self,t):
+    def __GetClosestTimeStepIndex(self, t):
         closest_timeStep_value = min(self.__timeList, key=lambda x: abs(x - t))
         closest_timeStep_index = np.where(self.__timeList == closest_timeStep_value)[0][0]
         return int(closest_timeStep_index)
 
-    def getRaynoldsMatrix(self,t):
-        time_step_index = self.getClosestTimeStepIndex(t)
+    def __GetReynoldsMatrix(self, t):
+        time_step_index = self.__GetClosestTimeStepIndex(t)
         plt_3d_data = self.sim.data_3d[time_step_index]
 
         mesh = self.sim.meshes[0]
@@ -435,8 +441,8 @@ class windODE:
 
         return re_data
 
-    def getRaynoldsNumber(self, x, t):
-        re_data = self.getRaynoldsMatrix(t)
+    def __GetReynoldsNumber(self, x, t):
+        re_data = self.__GetReynoldsMatrix(t)
         if len(re_data)==0:
             return
 
@@ -445,10 +451,10 @@ class windODE:
 
         return re_value
 
-    def evaluateRaynoldsValues(self):
+    def EvaluateReynoldsValues(self):
         values = defaultdict(lambda : 0)
-        for t in self.__timeList[3:6]:
-            current_Re_values = self.getRaynoldsMatrix(t)
+        for t in self.__timeList:
+            current_Re_values = self.__GetReynoldsMatrix(t)
             flatten_values =flatten_values_sorted  = np.array(current_Re_values,dtype=np.float64).flatten()
             flatten_values_list = np.array(list(set(flatten_values)),dtype=np.float64)
             flatten_values_sorted= list(np.sort(flatten_values_sorted))
@@ -583,13 +589,13 @@ def main(args):
     t_span = [15,16]
     start_time = time.perf_counter()
     app = windODE(dir, fds_loc, t_span,100)
-    app.evaluateRaynoldsValues()
+    app.EvaluateReynoldsValues()
 
 
     # app.getStartingPoints()
     # app.startingPointsRibbon([19, 1, 3.5], [1, 19, 3.5], 40)
     # app.startingpoints = [[10,10,3]]
-    app.runODE(reverse_integration=True)
+    app.StartODE(reverse_integration=True)
 
     app.filterOutStreamsByLength()
     # app.write2bin("data","temp")
