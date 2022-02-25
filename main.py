@@ -43,7 +43,7 @@ def main(args):
     # Ordinary Differential Equations for wind vectors
     windODE(
         fdsOutputDir, fdsInputFile, t_span, starting_points
-    ).getVoxalSize().getStartingPoints().readInBin().runODE().write2bin(
+    ).getVoxalSize().getStartingPoints().readInBin().StartODE().write2bin(
         os.path.join(os.path.join(saveLocation, "wind"), "temp")
     )
 

@@ -239,9 +239,9 @@ class windODE:
 
         self.timeReasults = {}
         for t_start in self.__timeList:
-            print(t_start,end=' - ')
             if t_start > self.t_span[1] or t_start < self.t_span[0]:
                 continue
+
             time_step_index = self.__GetClosestTimeStepIndex(t_start)
 
             all_results=self.runODE(time_step_index)
@@ -249,7 +249,7 @@ class windODE:
                 backward = self.runODE(time_step_index,True)
                 all_results= self.combineODEFrames(all_results,backward)
             self.timeReasults[t_start] = all_results
-            print()
+
         return self
 
     def combineODEFrames(self, all_forward_data,all_backwards_data):
@@ -453,10 +453,9 @@ class windODE:
 
     def EvaluateReynoldsValues(self):
         values = defaultdict(lambda : 0)
-        for t in self.__timeList:
+        for t in self.__timeList[3:10]:
             current_Re_values = self.__GetReynoldsMatrix(t)
             flatten_values =flatten_values_sorted  = np.array(current_Re_values,dtype=np.float64).flatten()
-            flatten_values_list = np.array(list(set(flatten_values)),dtype=np.float64)
             flatten_values_sorted= list(np.sort(flatten_values_sorted))
             Re_percentile_min = np.percentile(flatten_values,99)
             ranking = {}
