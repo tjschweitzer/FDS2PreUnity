@@ -1,20 +1,29 @@
+# %%
+# import sys
+# !{sys.executable} - mpip
+# install
+# pandas
+# %%
 # Import the required modules
 import glob
-import sys
 import time
 import os
 from collections import defaultdict
 import fdsreader as fds
-import matplotlib.pyplot
 import matplotlib.pyplot as plt
-import numpy as np
-from scipy import interpolate,signal
-
-
+from scipy.signal import find_peaks
 from scipy.integrate import solve_ivp
-
 from matplotlib import cm
 
+import pandas as pd
+import numpy as np
+from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_score
+from sklearn.metrics import pairwise_distances_argmin_min
+
+
+
+# %%
 
 class windODE:
     def __init__(
@@ -52,14 +61,14 @@ class windODE:
         self.__voxalSize = {}
         self.__maxVelocity = 0.0
         self.__maxRe = 0.0
-        self.__REDict=defaultdict(lambda : [])
+        self.__REDict = defaultdict(lambda: [])
         self.startingpoints = []
         self.__meshBounds = self.sim.meshes[0]
         self.__meshExtent = self.sim.meshes[0].extent
 
-        self.getVoxalSize()
+        self.setVoxalSize()
 
-    def getVoxalSize(self):
+    def setVoxalSize(self):
         """
         Calculates voxal size
         :return:
@@ -76,14 +85,17 @@ class windODE:
         )
         return self
 
-    def getPositionFromIndex(self,x):
+    def getVoxalSize(self):
+        return self.__voxalSize
+
+    def getPositionFromIndex(self, x):
         x_index = x[0]
         y_index = x[1]
         z_index = x[2]
-        x_position = self.__meshExtent.x_start + x_index*self.__voxalSize["vx"]
-        y_position = self.__meshExtent.y_start + y_index*self.__voxalSize["vy"]
-        z_position = self.__meshExtent.z_start + z_index*self.__voxalSize["vz"]
-        return [x_position,y_position,z_position]
+        x_position = self.__meshExtent.x_start + x_index * self.__voxalSize["vx"]
+        y_position = self.__meshExtent.y_start + y_index * self.__voxalSize["vy"]
+        z_position = self.__meshExtent.z_start + z_index * self.__voxalSize["vz"]
+        return [x_position, y_position, z_position]
 
     def getStartingPoints(self):
 
@@ -199,12 +211,12 @@ class windODE:
         self.startingpoints.extend(points)
         return self
 
-    def runODE(self,time_step_index,reverse_integration=False):
+    def runODE(self, time_step_index, reverse_integration=False):
         t_span = [
             min(self.__timeList[time_step_index:]),
             max(self.__timeList[time_step_index:]),
         ]
-        current_results=[]
+        current_results = []
 
         if reverse_integration:
             t_span[1] = 0.0
@@ -244,15 +256,15 @@ class windODE:
 
             time_step_index = self.__GetClosestTimeStepIndex(t_start)
 
-            all_results=self.runODE(time_step_index)
+            all_results = self.runODE(time_step_index)
             if reverse_integration:
-                backward = self.runODE(time_step_index,True)
-                all_results= self.combineODEFrames(all_results,backward)
+                backward = self.runODE(time_step_index, True)
+                all_results = self.combineODEFrames(all_results, backward)
             self.timeReasults[t_start] = all_results
 
         return self
 
-    def combineODEFrames(self, all_forward_data,all_backwards_data):
+    def combineODEFrames(self, all_forward_data, all_backwards_data):
         return_values = all_backwards_data
         for i in range(len(all_backwards_data)):
             backwards_data = all_backwards_data[i]
@@ -264,20 +276,17 @@ class windODE:
             return_values[i]['velocity'] = backwards_data['velocity'][::-1] * -1
             return_values[i]['re'] = backwards_data['re'][::-1]
 
+            return_values[i]['t'] = np.concatenate((backwards_data['t'], forward_data['t'][1:]))
 
-            return_values[i]['t']= np.concatenate((backwards_data['t'], forward_data['t'][1:]))
-            print(return_values[i]['y'][0])
-            print(forward_data['y'][0])
-            y_=[np.concatenate((backwards_data['y'][0],forward_data['y'][0][1:])),
-              np.concatenate((backwards_data['y'][1],forward_data['y'][1][1:])),
-              np.concatenate((backwards_data['y'][2],forward_data['y'][2][1:]))]
-            return_values[i]['y']=y_
-            return_values[i]['velocity']=np.concatenate((backwards_data['velocity'],forward_data['velocity'][1:]))
+            y_ = [np.concatenate((backwards_data['y'][0], forward_data['y'][0][1:])),
+                  np.concatenate((backwards_data['y'][1], forward_data['y'][1][1:])),
+                  np.concatenate((backwards_data['y'][2], forward_data['y'][2][1:]))]
+            return_values[i]['y'] = y_
+            return_values[i]['velocity'] = np.concatenate((backwards_data['velocity'], forward_data['velocity'][1:]))
 
-            return_values[i]['re']=np.concatenate((backwards_data['re'], forward_data['re'][1:]))
+            return_values[i]['re'] = np.concatenate((backwards_data['re'], forward_data['re'][1:]))
 
         return return_values
-
 
     def write2bin(self, desired_directory, file_name_prefix):
         fileName = os.path.join(desired_directory, file_name_prefix)
@@ -392,8 +401,8 @@ class windODE:
             deltaTime = allTimes[i] - allTimes[i - 1]
             squared_dist = np.sum((currentPosition - previousPosition) ** 2, axis=0)
             dist = np.sqrt(squared_dist)
-            if dist ==0.0 or deltaTime ==0.0:
-                speed=0.0
+            if dist == 0.0 or deltaTime == 0.0:
+                speed = 0.0
             else:
                 speed = dist / deltaTime
             allSpeeds.append(speed)
@@ -405,20 +414,22 @@ class windODE:
     def drawPlot(self):
         for time in self.distanceofWindStreams_index.keys():
             data = self.timeReasults[time]
-            maxRE= np.max(np.array(self.__REDict[time]))
+            maxRE = np.max(np.array(self.__REDict[time]))
             fig = plt.figure(figsize=(8, 6))
             ax = fig.add_subplot(1, 1, 1, projection="3d")
+            print(time)
+            print(self.distanceofWindStreams_index[time])
             for i in self.distanceofWindStreams_index[time]:
-                print(data[i]['t'])
+                print(data[i]["y"][0][:])
                 x = data[i]["y"][0][:]
                 y = data[i]["y"][1][:]
                 z = data[i]["y"][2][:]
                 re = data[i]["re"][:]
 
-                temp =np.max(re)/maxRE
-                ax.plot(x, y, z,  c=cm.viridis(temp))
-            plt.show()
+                temp = np.max(re) / maxRE
+                ax.plot(x, y, z, c=cm.viridis(temp))
 
+            plt.show()
 
     def __GetClosestTimeStepIndex(self, t):
         closest_timeStep_value = min(self.__timeList, key=lambda x: abs(x - t))
@@ -443,7 +454,7 @@ class windODE:
 
     def __GetReynoldsNumber(self, x, t):
         re_data = self.__GetReynoldsMatrix(t)
-        if len(re_data)==0:
+        if len(re_data) == 0:
             return
 
         index_values = self.get_index_values(x)
@@ -452,34 +463,34 @@ class windODE:
         return re_value
 
     def EvaluateReynoldsValues(self):
-        values = defaultdict(lambda : 0)
+        values = defaultdict(lambda: 0)
         for t in self.__timeList[3:10]:
             current_Re_values = self.__GetReynoldsMatrix(t)
-            flatten_values =flatten_values_sorted  = np.array(current_Re_values,dtype=np.float64).flatten()
-            flatten_values_sorted= list(np.sort(flatten_values_sorted))
-            Re_percentile_min = np.percentile(flatten_values,99)
+            flatten_values = flatten_values_sorted = np.array(current_Re_values, dtype=np.float64).flatten()
+            flatten_values_sorted = list(np.sort(flatten_values_sorted))
+            Re_percentile_min = np.percentile(flatten_values, 86.5)
             ranking = {}
             for i in range(len(flatten_values_sorted)):
-                ranking[flatten_values[i]]=i
+                ranking[flatten_values[i]] = i
 
             for i in range(current_Re_values.shape[0]):
                 for j in range(current_Re_values.shape[1]):
                     for k in range(current_Re_values.shape[2]):
-                        if current_Re_values[i,j,k] >=Re_percentile_min:
-                            values[f"{i},{j},{k}"] += current_Re_values[i,j,k]
+                        if current_Re_values[i, j, k] >= Re_percentile_min:
+                            values[f"{i},{j},{k}"] += current_Re_values[i, j, k]
 
         print(np.max(list(values.values())))
         fig = plt.figure(figsize=(10, 7))
         ax = plt.axes(projection="3d")
-        max_value = np.percentile(list(values.values()),70)
-        x=[]
-        y=[]
-        z=[]
-        c=[]
+        max_value = np.percentile(list(values.values()), 70)
+        x = []
+        y = []
+        z = []
+        c = []
         for key in list(values.keys()):
-            if values[key]< max_value:
+            if values[key] < max_value:
                 continue
-            x_k,y_k,z_k = key.split(',')
+            x_k, y_k, z_k = key.split(',')
             x.append(int(x_k))
             y.append(int(y_k))
             z.append(int(z_k))
@@ -489,7 +500,7 @@ class windODE:
         # Creating color map
         my_cmap = plt.get_cmap('viridis')
 
-        scatter_plot=ax.scatter3D(x,y,z,c=c,cmap=my_cmap)
+        scatter_plot = ax.scatter3D(x, y, z, c=c, cmap=my_cmap)
 
         plt.colorbar(scatter_plot)
 
@@ -506,7 +517,7 @@ class windODE:
         y_1 = []
         z_1 = []
         c_1 = []
-        for key in highest_re_Points[self.__numberOfStreakLines*-1:]:
+        for key in highest_re_Points[self.__numberOfStreakLines * -1:]:
             x_1.append(x[key])
             y_1.append(y[key])
             z_1.append(z[key])
@@ -519,15 +530,14 @@ class windODE:
         plt.colorbar(scatter_plot)
         plt.show()
 
-        points_of_interest_index = [ [x_1[i],y_1[i],z_1[i]] for i in range(len(x_1))]
-        points_of_interest_position = [ self.getPositionFromIndex([x_1[i],y_1[i],z_1[i]]) for i in range(len(x_1))]
+        points_of_interest_index = [[x_1[i], y_1[i], z_1[i]] for i in range(len(x_1))]
+        points_of_interest_position = [self.getPositionFromIndex([x_1[i], y_1[i], z_1[i]]) for i in range(len(x_1))]
         for i in range(len(points_of_interest_position)):
-            print(points_of_interest_index[i],points_of_interest_position[i])
+            print(points_of_interest_index[i], points_of_interest_position[i])
 
         self.startingpoints.extend(points_of_interest_position)
 
-
-    def getDataFromTime(self,t):
+    def getDataFromTime(self, t):
         if t in self.timeReasults.keys():
             return self.timeReasults[t]
         return []
@@ -535,74 +545,350 @@ class windODE:
     def getMaxRE(self):
         return self.__maxRe
 
-# The Reynolds number is defined as
+    def getReynoldsMatrix(self, t):
+        return self.__GetReynoldsMatrix(t)
 
-# Re = uL/ν = ρuL/μ
-
-# where:
-
-# ρ is the density of the fluid (SI units: kg/m3)
-# u is the flow speed (m/s)
-# L is a characteristic linear dimension (m) (see the below sections of this article for examples)
-# μ is the dynamic viscosity of the fluid (Pa·s or N·s/m2 or kg/(m·s))
-# ν is the kinematic viscosity of the fluid (m2/s).
-
-# The Dynamic viscocity coefficient is defined as
-
-# μ = μo*(a/b)*(T/To)3/2
-
-# a = 0.555To + C
-# b = 0.555T + C
-
-# where
-
-# μ  = viscosity in centipoise at input temperature T
-# μ0 = reference viscosity in centipoise at reference temperature To 0.01827
-# T   = input temperature in degrees Rankine
-# T0 = reference temperature in degrees Rankine 524.07
-# C  = Sutherland's constant  = 120
+    def getTimeList(self):
+        return self.__timeList
 
 
 # %%
-def main(args):
-    if len(args) < 5:
-        print("Need at least 5 arguments")
-        print(
-            "python windODE_class.py {fds output directory} {fds input file} {start time} {end time} {Wind Start Points}"
-        )
-        print("Wind Start points can be 1 or more {X_MIN, X_MAX,Y_MIN, Y_MAX}")
-        # return
-    # dir = args[0]
-    # fds_loc = args[1]
-    # t_span = [args[2], args[3]]
-    # start_points = args[4:]
-
-    fds_loc = "/home/trent/Trunk/Trunk/Trunk.fds"
-    dir = "/home/trent/Trunk/Fire"
-    # fds_loc = "/home/kl3pt0/Trunk/Trunk/Trunk.fds"
-    # dir = "/home/kl3pt0/Trunk/Fire"
-    #
-    # fds_loc = "E:\Trunk\Trunk\Trunk\Trunk.fds"
-    # dir = "E:\Trunk\Trunk\\temp\\"
-
-    t_span = [15,16]
-    start_time = time.perf_counter()
-    app = windODE(dir, fds_loc, t_span,100)
-    app.EvaluateReynoldsValues()
 
 
-    # app.getStartingPoints()
-    # app.startingPointsRibbon([19, 1, 3.5], [1, 19, 3.5], 40)
-    # app.startingpoints = [[10,10,3]]
-    app.StartODE(reverse_integration=True)
+fds_loc = "/home/trent/Trunk/Trunk/Trunk.fds"
+dir = "/home/trent/Trunk/FireTime"
+# fds_loc = "/home/kl3pt0/Trunk/Trunk/Trunk.fds"
+# dir = "/home/kl3pt0/Trunk/Fire"
+#
+fds_loc = "E:\Trunk\Trunk\Trunk\Trunk.fds"
+dir = "E:\Trunk\Trunk\\Fire\\"
 
-    app.filterOutStreamsByLength()
-    # app.write2bin("data","temp")
-
-    print(f"Total Time {time.perf_counter()-start_time:0.4f}")
-    app.drawPlot()
-    print()
+t_span = [15, 16]
+start_time = time.perf_counter()
+app = windODE(dir, fds_loc, t_span, 100)
+# app.EvaluateReynoldsValues()
 
 
-if __name__ == "__main__":
-    main(sys.argv[1:])
+# app.getStartingPoints()
+# app.startingPointsRibbon([19, 1, 3.5], [1, 19, 3.5], 40)
+# app.startingpoints = [[10,10,3]]
+# app.StartODE(reverse_integration=True)
+#
+# app.filterOutStreamsByLength()
+# app.write2bin("data","temp")
+
+print(f"Total Time {time.perf_counter() - start_time:0.4f}")
+# app.drawPlot()
+print()
+
+
+# %%
+def getAverageREOverTime(app, t_start, t_end):
+    allTimelist = app.getTimeList()
+    filteredTimeList = allTimelist[allTimelist >= t_start]
+    filteredTimeList = filteredTimeList[filteredTimeList <= t_end]
+    reAverageMatrix = app.getReynoldsMatrix(filteredTimeList[0])
+    for i in range(1, len(filteredTimeList)):
+        reAverageMatrix = reAverageMatrix + app.getReynoldsMatrix(filteredTimeList[i])
+    reAverageMatrix = reAverageMatrix / len(filteredTimeList)
+    return np.array(reAverageMatrix)
+
+
+# %%
+t_start = 0
+t_end = 60
+
+testData = getAverageREOverTime(app, t_start, t_end)
+
+
+# %%
+def getMeanPeaksandSTD(reMatrix, n_bins):
+    dataFlatten = reMatrix.flatten()
+    dataNoZero = dataFlatten[dataFlatten > 0.0]
+    print(f"Min non Zero Value {np.min(dataNoZero)}")
+    dataMean = np.mean(dataNoZero)
+    dataStd = np.std(dataNoZero)
+    dataSig2 = dataMean + 2.0 * dataStd
+    dataSigNeg3 = dataMean - 3.0 * dataStd
+    print(f"Standard Dev {dataStd} Mean {dataMean}  2-sigma {dataSig2}")
+
+    fig, ax = plt.subplots(figsize=(12, 6))
+
+    plt.title(f"{n_bins} Bins without Zero Values")
+    plt.xlim([-10, np.max(testData)])
+
+    n, bins, patches = plt.hist(dataNoZero, bins=n_bins)
+
+    peaks, _ = find_peaks(n, distance=15)
+    print(bins[peaks])
+    print(peaks)
+    plt.axvline(dataMean, color='k', linestyle='dashed', linewidth=1, label="Mean")
+    plt.axvline(dataSig2, color='r', linestyle='dashed', linewidth=1, label="2 Sigma")
+    plt.axvline(dataSigNeg3, color='r', linestyle='dashed', linewidth=1, label="Negative 3 Sigma")
+    min_ylim, max_ylim = plt.ylim()
+    plt.text(dataMean * 1.05, max_ylim * 0.9, 'Mean: {:.2f}'.format(dataMean))
+    plt.text((dataSigNeg3) * 1.05, max_ylim * 0.9, '-3 Sigma: {:.2f}'.format(dataSigNeg3))
+    plt.text((dataSig2) * 1.05, max_ylim * 0.9, '2 Sigma: {:.2f}'.format(dataSig2))
+    ax.legend()
+    for patch_i in range(len(patches)):
+        if bins[patch_i] < dataSig2:
+            patches[patch_i].set_fc("xkcd:baby poop green")
+        if bins[patch_i] < dataMean:
+            patches[patch_i].set_fc("blue")
+        if patch_i in peaks:
+            patches[patch_i].set_fc("green")
+        if bins[patch_i] >= dataSig2:
+            patches[patch_i].set_fc("red")
+    plt.show()
+    returnDict = {'n': n,
+                  'bins': bins,
+                  'patches': patches,
+                  'peaks': peaks,
+                  'mean': dataMean,
+                  'std': dataStd,
+                  'sigmaTwo': dataSig2,
+                  'sigmaNegThree': dataSigNeg3}
+    return returnDict
+
+
+# %%
+plotInfo = getMeanPeaksandSTD(reMatrix=testData, n_bins=400)
+
+
+# %%
+def plotPointsInRERange(plotRange, plotInfo):
+    bins = plotInfo['bins']
+    print(bins[plotInfo['peaks']])
+    n = plotInfo['n']
+
+    print(testData.shape)
+    print(f"Points between {plotRange[0]} and {plotRange[1]}")
+    fig = plt.figure(figsize=(10, 7))
+    ax = plt.axes(projection="3d")
+    x_1 = []
+    y_1 = []
+    z_1 = []
+    c_1 = []
+    for x_i in range(testData.shape[0]):
+        for y_i in range(testData.shape[1]):
+            for z_i in range(testData.shape[2]):
+                if (plotRange[0] < testData[x_i, y_i, z_i]):
+                    if plotRange[1] is None or testData[x_i, y_i, z_i] <= plotRange[1]:
+                        x_1.append(x_i)
+                        y_1.append(y_i)
+                        z_1.append(z_i)
+                        c_1.append(testData[x_i, y_i, z_i])
+
+    # Creating color map
+    my_cmap = plt.get_cmap('viridis')
+    scatter_plot = ax.scatter3D(x_1, y_1, z_1, c=c_1, cmap=my_cmap)
+    ax.set_zlim(0, 100)
+    ax.set_ylim(0, 100)
+    ax.set_xlim(0, 100)
+    plt.colorbar(scatter_plot)
+    plt.show()
+
+    indexValues = [x_1, y_1, z_1, c_1]
+    return [app.getPositionFromIndex([indexValues[0][i], indexValues[1][i], indexValues[2][i]]) for i in
+                     range(len(indexValues[0]))]
+
+
+# %%
+
+lamFlowIndex = plotPointsInRERange([0, plotInfo['std'] ], plotInfo)
+
+# _ = plotPointsInRERange([ plotInfo['sigmaNegThree'] ,plotInfo['mean']], plotInfo)
+#
+# lamFlowIndex = plotPointsInRERange([plotInfo['mean'] - plotInfo['std'], plotInfo['mean'] ], plotInfo)
+turbFlowIndex = plotPointsInRERange([plotInfo['sigmaTwo'], None], plotInfo)
+
+
+for i in lamFlowIndex:
+    turbFlowIndex.append(i)
+# %%
+
+def getStartingPositions(flowPostions,k_num):
+    Z = pd.DataFrame(np.array(flowPostions))
+
+    fig = plt.figure(figsize=(8, 6))
+    ax = fig.add_subplot(1, 1, 1, projection="3d")
+    i = k_num
+    KMean = KMeans(n_clusters=i, )
+    KMean.fit(Z)
+    label = KMean.predict(Z)
+
+    print(f'Silhouette Score(n={i}): {silhouette_score(Z, label)}')
+
+    ax.scatter(flowPostions.T[0], flowPostions.T[1], flowPostions.T[2], c=label)
+    closest, _ = pairwise_distances_argmin_min(KMean.cluster_centers_, Z)
+
+    plt.show()
+    print(label)
+    return [[flowPostions.T[0][c], flowPostions.T[1][c], flowPostions.T[2][c]] for c in closest]
+
+
+# %%
+startingPositions = getStartingPositions(np.array(lamFlowIndex),64)
+startingPositions2 = getStartingPositions(np.array(turbFlowIndex),132)
+for i in startingPositions:
+    startingPositions2.append(i)
+# %%
+# %%
+
+# %%
+
+
+app.startingpoints = startingPositions2
+app.StartODE(reverse_integration=True)
+
+app.filterOutStreamsByLength()
+app.drawPlot()
+print()
+
+# %%
+all_startingpoints = {}
+for time in app.distanceofWindStreams_index.keys():
+    all_startingpoints[time] = []
+    fig = plt.figure(figsize=(8, 6))
+    ax = fig.add_subplot(1, 1, 1, projection="3d")
+    data = app.timeReasults[time]
+    for i in app.distanceofWindStreams_index[time]:
+        x = data[i]["y"][0][0]
+        y = data[i]["y"][1][0]
+        z = data[i]["y"][2][0]
+        all_startingpoints[time].append([x, y, z])
+
+        ax.scatter(x, y, z, )
+    plt.show()
+
+# %%
+
+
+# %%
+for t in all_startingpoints.keys():
+    Z = pd.DataFrame(all_startingpoints[t])
+    print(t)
+
+    i = 100
+    KMean = KMeans(n_clusters=i)
+    KMean.fit(Z)
+    label = KMean.predict(Z)
+
+    print(f'Silhouette Score(n={i}): {silhouette_score(Z, label)}')
+
+    fig = plt.figure(figsize=(8, 6))
+    ax = fig.add_subplot(1, 1, 1, projection="3d")
+    #     ax.scatter3D(Z[0],Z[1],Z[2],c=label/i )
+    closest, _ = pairwise_distances_argmin_min(KMean.cluster_centers_, Z)
+    data = app.timeReasults[t]
+    for c in closest:
+        ax.scatter3D(Z[0][c], Z[1][c], Z[2][c], marker='^')
+
+        x = data[c]["y"][0][:]
+        y = data[c]["y"][1][:]
+        z = data[c]["y"][2][:]
+        re = data[c]["re"][:]
+
+        temp = np.max(re) / 1600.
+
+        ax.plot(x, y, z, c=cm.viridis(temp))
+
+    plt.show()
+
+# %%
+
+# for time in app.distanceofWindStreams_index.keys():
+#     data = self.timeReasults[time]
+#     maxRE = np.max(np.array(self.__REDict[time]))
+#     fig = plt.figure(figsize=(8, 6))
+#     ax = fig.add_subplot(1, 1, 1, projection="3d")
+#     for i in self.distanceofWindStreams_index[time]:
+#         x = data[i]["y"][0][:]
+#         y = data[i]["y"][1][:]
+#         z = data[i]["y"][2][:]
+#         re = data[i]["re"][:]
+#
+#         temp = np.max(re) / maxRE
+#         ax.plot(x, y, z, c=cm.viridis(temp))
+#     plt.show()
+    # %% md
+    ### The Reynolds number is defined as
+#
+#     Re = uL / ν = ρuL / μ
+#
+# where:
+#
+# ρ is the
+# density
+# of
+# the
+# fluid(SI
+# units: kg / m3)
+# u is the
+# flow
+# speed(m / s)
+# L is a
+# characteristic
+# linear
+# dimension(m)(see
+# the
+# below
+# sections
+# of
+# this
+# article
+# for examples)
+# μ is the
+# dynamic
+# viscosity
+# of
+# the
+# fluid(Pa·s or N·s / m2 or kg / (m·s))
+# ν is the
+# kinematic
+# viscosity
+# of
+# the
+# fluid(m2 / s).
+# # %% md
+# ### The Dynamic viscocity coefficient is defined as
+#
+# μ = μo * (a / b) * (T / To)
+# 3 / 2
+#
+# a = 0.555
+# To + C
+# b = 0.555
+# T + C
+#
+# where
+#
+# μ = viscosity in centipoise
+# at
+# input
+# temperature
+# T
+# μ0 = reference
+# viscosity in centipoise
+# at
+# reference
+# temperature
+# To
+# 0.01827
+# T = input
+# temperature in degrees
+# Rankine
+# T0 = reference
+# temperature in degrees
+# Rankine
+# 524.07
+# C = Sutherland
+# 's constant  = 120
+# %%
+
+# %%
+
+
+# %%
+
+# %%
