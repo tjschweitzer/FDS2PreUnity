@@ -20,6 +20,8 @@ import numpy as np
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
 from sklearn.metrics import pairwise_distances_argmin_min
+import pickle
+
 
 
 
@@ -292,6 +294,7 @@ class windODE:
         fileName = os.path.join(desired_directory, file_name_prefix)
         allData = self.timeReasults
         maxVel = self.__maxVelocity
+        maxRe = self.__maxRe
         print(f"Max {maxVel}")
         for time in allData.keys():
             data = allData[time]
@@ -302,7 +305,7 @@ class windODE:
             time_string = f"{time}".split(".")[1]
             with open(f"{fileName}_{int(time)}_{time_string}.binwind", "wb") as outfile:
 
-                np.ndarray.tofile(np.array([maxVel], dtype=np.float32), outfile)
+                np.ndarray.tofile(np.array([maxRe], dtype=np.float32), outfile)
                 np.ndarray.tofile(np.array([numberofWindstreams], dtype=int), outfile)
                 np.ndarray.tofile(np.array(lengthofWindStreams, dtype=int), outfile)
 
@@ -312,7 +315,7 @@ class windODE:
                         currentStream.append(
                             [
                                 data[i]["t"][j],
-                                data[i]["velocity"][j],
+                                data[i]["re"][j],
                                 data[i]["y"][0][j],
                                 data[i]["y"][1][j],
                                 data[i]["y"][2][j],
@@ -417,8 +420,6 @@ class windODE:
             maxRE = np.max(np.array(self.__REDict[time]))
             fig = plt.figure(figsize=(8, 6))
             ax = fig.add_subplot(1, 1, 1, projection="3d")
-            print(time)
-            print(self.distanceofWindStreams_index[time])
             for i in self.distanceofWindStreams_index[time]:
                 print(data[i]["y"][0][:])
                 x = data[i]["y"][0][:]
@@ -560,8 +561,9 @@ dir = "/home/trent/Trunk/FireTime"
 # fds_loc = "/home/kl3pt0/Trunk/Trunk/Trunk.fds"
 # dir = "/home/kl3pt0/Trunk/Fire"
 #
-fds_loc = "E:\Trunk\Trunk\Trunk\Trunk.fds"
-dir = "E:\Trunk\Trunk\\Fire\\"
+# fds_loc = "E:\Trunk\Trunk\Trunk\Trunk.fds"
+
+# dir = "E:\Trunk\Trunk\\Fire\\"
 
 t_span = [15, 16]
 start_time = time.perf_counter()
@@ -582,6 +584,7 @@ print(f"Total Time {time.perf_counter() - start_time:0.4f}")
 print()
 
 
+plot_Flag = False
 # %%
 def getAverageREOverTime(app, t_start, t_end):
     allTimelist = app.getTimeList()
@@ -594,14 +597,6 @@ def getAverageREOverTime(app, t_start, t_end):
     return np.array(reAverageMatrix)
 
 
-# %%
-t_start = 0
-t_end = 60
-
-testData = getAverageREOverTime(app, t_start, t_end)
-
-
-# %%
 def getMeanPeaksandSTD(reMatrix, n_bins):
     dataFlatten = reMatrix.flatten()
     dataNoZero = dataFlatten[dataFlatten > 0.0]
@@ -611,60 +606,60 @@ def getMeanPeaksandSTD(reMatrix, n_bins):
     dataSig2 = dataMean + 2.0 * dataStd
     dataSigNeg3 = dataMean - 3.0 * dataStd
     print(f"Standard Dev {dataStd} Mean {dataMean}  2-sigma {dataSig2}")
+    if plot_Flag:
+        fig, ax = plt.subplots(figsize=(12, 6))
 
-    fig, ax = plt.subplots(figsize=(12, 6))
+        plt.title(f"{n_bins} Bins without Zero Values")
+        plt.xlim([-10, np.max(reMatrix)])
 
-    plt.title(f"{n_bins} Bins without Zero Values")
-    plt.xlim([-10, np.max(testData)])
+        n, bins, patches = plt.hist(dataNoZero, bins=n_bins)
 
-    n, bins, patches = plt.hist(dataNoZero, bins=n_bins)
+        peaks, _ = find_peaks(n, distance=15)
+        print(bins[peaks])
+        print(peaks)
+        plt.axvline(dataMean, color='k', linestyle='dashed', linewidth=1, label="Mean")
+        plt.axvline(dataSig2, color='r', linestyle='dashed', linewidth=1, label="2 Sigma")
+        plt.axvline(dataSigNeg3, color='r', linestyle='dashed', linewidth=1, label="Negative 3 Sigma")
+        min_ylim, max_ylim = plt.ylim()
+        plt.text(dataMean * 1.05, max_ylim * 0.9, 'Mean: {:.2f}'.format(dataMean))
+        plt.text((dataSigNeg3) * 1.05, max_ylim * 0.9, '-3 Sigma: {:.2f}'.format(dataSigNeg3))
+        plt.text((dataSig2) * 1.05, max_ylim * 0.9, '2 Sigma: {:.2f}'.format(dataSig2))
+        ax.legend()
 
-    peaks, _ = find_peaks(n, distance=15)
-    print(bins[peaks])
-    print(peaks)
-    plt.axvline(dataMean, color='k', linestyle='dashed', linewidth=1, label="Mean")
-    plt.axvline(dataSig2, color='r', linestyle='dashed', linewidth=1, label="2 Sigma")
-    plt.axvline(dataSigNeg3, color='r', linestyle='dashed', linewidth=1, label="Negative 3 Sigma")
-    min_ylim, max_ylim = plt.ylim()
-    plt.text(dataMean * 1.05, max_ylim * 0.9, 'Mean: {:.2f}'.format(dataMean))
-    plt.text((dataSigNeg3) * 1.05, max_ylim * 0.9, '-3 Sigma: {:.2f}'.format(dataSigNeg3))
-    plt.text((dataSig2) * 1.05, max_ylim * 0.9, '2 Sigma: {:.2f}'.format(dataSig2))
-    ax.legend()
-    for patch_i in range(len(patches)):
-        if bins[patch_i] < dataSig2:
-            patches[patch_i].set_fc("xkcd:baby poop green")
-        if bins[patch_i] < dataMean:
-            patches[patch_i].set_fc("blue")
-        if patch_i in peaks:
-            patches[patch_i].set_fc("green")
-        if bins[patch_i] >= dataSig2:
-            patches[patch_i].set_fc("red")
-    plt.show()
+        for patch_i in range(len(patches)):
+            if bins[patch_i] < dataSig2:
+                patches[patch_i].set_fc("xkcd:baby poop green")
+            if bins[patch_i] < dataMean:
+                patches[patch_i].set_fc("blue")
+            if patch_i in peaks:
+                patches[patch_i].set_fc("green")
+            if bins[patch_i] >= dataSig2:
+                patches[patch_i].set_fc("red")
+        plt.show()
+    else:
+
+        n, bins = np.histogram(dataNoZero, bins=n_bins)
     returnDict = {'n': n,
                   'bins': bins,
-                  'patches': patches,
-                  'peaks': peaks,
                   'mean': dataMean,
                   'std': dataStd,
                   'sigmaTwo': dataSig2,
-                  'sigmaNegThree': dataSigNeg3}
+                  'sigmaNegThree': dataSigNeg3,
+                  'None':None,
+                  'Zero':0}
     return returnDict
 
 
-# %%
-plotInfo = getMeanPeaksandSTD(reMatrix=testData, n_bins=400)
 
 
-# %%
-def plotPointsInRERange(plotRange, plotInfo):
+
+
+def plotPointsInRERange(testData,plotRange, plotInfo):
     bins = plotInfo['bins']
-    print(bins[plotInfo['peaks']])
     n = plotInfo['n']
 
     print(testData.shape)
     print(f"Points between {plotRange[0]} and {plotRange[1]}")
-    fig = plt.figure(figsize=(10, 7))
-    ax = plt.axes(projection="3d")
     x_1 = []
     y_1 = []
     z_1 = []
@@ -678,71 +673,86 @@ def plotPointsInRERange(plotRange, plotInfo):
                         y_1.append(y_i)
                         z_1.append(z_i)
                         c_1.append(testData[x_i, y_i, z_i])
+    if plot_Flag:
+        fig = plt.figure(figsize=(10, 7))
+        ax = plt.axes(projection="3d")
 
-    # Creating color map
-    my_cmap = plt.get_cmap('viridis')
-    scatter_plot = ax.scatter3D(x_1, y_1, z_1, c=c_1, cmap=my_cmap)
-    ax.set_zlim(0, 100)
-    ax.set_ylim(0, 100)
-    ax.set_xlim(0, 100)
-    plt.colorbar(scatter_plot)
-    plt.show()
+
+
+        # Creating color map
+        my_cmap = plt.get_cmap('viridis')
+        scatter_plot = ax.scatter3D(x_1, y_1, z_1, c=c_1, cmap=my_cmap)
+        ax.set_zlim(0, 100)
+        ax.set_ylim(0, 100)
+        ax.set_xlim(0, 100)
+        plt.colorbar(scatter_plot)
+        plt.show()
 
     indexValues = [x_1, y_1, z_1, c_1]
-    return [app.getPositionFromIndex([indexValues[0][i], indexValues[1][i], indexValues[2][i]]) for i in
-                     range(len(indexValues[0]))]
+    return np.array([app.getPositionFromIndex([indexValues[0][i], indexValues[1][i], indexValues[2][i]]) for i in
+                     range(len(indexValues[0]))]),np.array([indexValues[3][i] for i in
+                     range(len(indexValues[0]))])
 
 
-# %%
-
-lamFlowIndex = plotPointsInRERange([0, plotInfo['std'] ], plotInfo)
-
-# _ = plotPointsInRERange([ plotInfo['sigmaNegThree'] ,plotInfo['mean']], plotInfo)
-#
-# lamFlowIndex = plotPointsInRERange([plotInfo['mean'] - plotInfo['std'], plotInfo['mean'] ], plotInfo)
-turbFlowIndex = plotPointsInRERange([plotInfo['sigmaTwo'], None], plotInfo)
 
 
-for i in lamFlowIndex:
-    turbFlowIndex.append(i)
-# %%
-
-def getStartingPositions(flowPostions,k_num):
+def getStartingPositions(flowPostions,k_num,weighted):
     Z = pd.DataFrame(np.array(flowPostions))
-
-    fig = plt.figure(figsize=(8, 6))
-    ax = fig.add_subplot(1, 1, 1, projection="3d")
-    i = k_num
-    KMean = KMeans(n_clusters=i, )
-    KMean.fit(Z)
+    KMean = KMeans(n_clusters=k_num)
+    KMean.fit(Z,sample_weight=weighted)
     label = KMean.predict(Z)
-
-    print(f'Silhouette Score(n={i}): {silhouette_score(Z, label)}')
-
-    ax.scatter(flowPostions.T[0], flowPostions.T[1], flowPostions.T[2], c=label)
     closest, _ = pairwise_distances_argmin_min(KMean.cluster_centers_, Z)
+    print(f'Silhouette Score(n={k_num}): {silhouette_score(Z, label)}')
+    if plot_Flag:
+        fig = plt.figure(figsize=(8, 6))
+        ax = fig.add_subplot(1, 1, 1, projection="3d")
 
-    plt.show()
+        my_cmap = plt.get_cmap('viridis')
+        scatter_plot =ax.scatter(flowPostions.T[0], flowPostions.T[1], flowPostions.T[2], c=label,cmap=my_cmap)
+
+
+        plt.legend()
+        plt.show()
     print(label)
-    return [[flowPostions.T[0][c], flowPostions.T[1][c], flowPostions.T[2][c]] for c in closest]
+    return np.array([[flowPostions.T[0][c], flowPostions.T[1][c], flowPostions.T[2][c]] for c in closest])
 
 
 # %%
-startingPositions = getStartingPositions(np.array(lamFlowIndex),64)
-startingPositions2 = getStartingPositions(np.array(turbFlowIndex),132)
-for i in startingPositions:
-    startingPositions2.append(i)
-# %%
-# %%
-
-# %%
 
 
-app.startingpoints = startingPositions2
+def getAllStartingPoint(app,t_start,t_end, n_bins, re_min,re_max,k_means):
+    testData = getAverageREOverTime(app, t_start, t_end)
+
+    plotInfo = getMeanPeaksandSTD(testData,n_bins)
+
+    flowIndex,weight = plotPointsInRERange(testData,[plotInfo[re_min],plotInfo[re_max]], plotInfo)
+
+    startingPositions = getStartingPositions(flowIndex,k_means,weighted=weight)
+
+    return startingPositions
+
+
+
+#%%
+nBins=400
+timeSets = [[0,10],[25,35],[50,60]]
+re_ranges_and_k_means = [['Zero','sigmaNegThree',8],['sigmaTwo','None',24]]
+all_starting_points = None
+for t_start, t_end in timeSets:
+    for re_min,re_max,k_means in re_ranges_and_k_means:
+
+        startingPostions = getAllStartingPoint(app,t_start,t_end,nBins,re_min,re_max,k_means)
+        if all_starting_points is None:
+            all_starting_points= startingPostions
+            continue
+        all_starting_points = np.append(all_starting_points,startingPostions,axis=0)
+        print(f"Done {t_start} {t_end}")
+app.startingpoints = all_starting_points
 app.StartODE(reverse_integration=True)
 
 app.filterOutStreamsByLength()
 app.drawPlot()
+app.write2bin("data","weightedMeans")
 print()
 
 # %%
@@ -764,36 +774,6 @@ for time in app.distanceofWindStreams_index.keys():
 # %%
 
 
-# %%
-for t in all_startingpoints.keys():
-    Z = pd.DataFrame(all_startingpoints[t])
-    print(t)
-
-    i = 100
-    KMean = KMeans(n_clusters=i)
-    KMean.fit(Z)
-    label = KMean.predict(Z)
-
-    print(f'Silhouette Score(n={i}): {silhouette_score(Z, label)}')
-
-    fig = plt.figure(figsize=(8, 6))
-    ax = fig.add_subplot(1, 1, 1, projection="3d")
-    #     ax.scatter3D(Z[0],Z[1],Z[2],c=label/i )
-    closest, _ = pairwise_distances_argmin_min(KMean.cluster_centers_, Z)
-    data = app.timeReasults[t]
-    for c in closest:
-        ax.scatter3D(Z[0][c], Z[1][c], Z[2][c], marker='^')
-
-        x = data[c]["y"][0][:]
-        y = data[c]["y"][1][:]
-        z = data[c]["y"][2][:]
-        re = data[c]["re"][:]
-
-        temp = np.max(re) / 1600.
-
-        ax.plot(x, y, z, c=cm.viridis(temp))
-
-    plt.show()
 
 # %%
 
