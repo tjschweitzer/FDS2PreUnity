@@ -306,9 +306,11 @@ class windODE:
             with open(f"{fileName}_{int(time)}_{time_string}.binwind", "wb") as outfile:
 
                 np.ndarray.tofile(np.array([maxRe], dtype=np.float32), outfile)
-                np.ndarray.tofile(np.array([numberofWindstreams], dtype=int), outfile)
-                np.ndarray.tofile(np.array(lengthofWindStreams, dtype=int), outfile)
-
+                np.ndarray.tofile(np.array([numberofWindstreams], dtype=np.int32), outfile)
+                np.ndarray.tofile(np.array(lengthofWindStreams, dtype=np.int32), outfile)
+                print(f"Time {time}  MaxValue {maxRe}  ")
+                print(f" Number of WindStreams   {np.array([numberofWindstreams])}")
+                print(f"Length of each wind stream {lengthofWindStreams}")
                 for i in range(numberofWindstreams):
                     currentStream = []
                     for j in range(len(data[i]["y"][0])):
@@ -326,6 +328,7 @@ class windODE:
                         np.array(currentStream, dtype=np.float32), outfile
                     )
                 print(fileName, "saved")
+
         return self
 
     def get_velocity(self, t, x):
@@ -565,7 +568,7 @@ dir = "/home/trent/Trunk/FireTime"
 
 # dir = "E:\Trunk\Trunk\\Fire\\"
 
-t_span = [15, 16]
+t_span = [0, 16]
 start_time = time.perf_counter()
 app = windODE(dir, fds_loc, t_span, 100)
 # app.EvaluateReynoldsValues()
@@ -731,45 +734,61 @@ def getAllStartingPoint(app,t_start,t_end, n_bins, re_min,re_max,k_means):
 
     return startingPositions
 
+def getAllStartingPoints(app,t_range, n_bins, re_min,re_max,k_means):
+    all_flowIndex = None
+    all_weights = None
+    for t_start, t_end in t_range:
+        testData = getAverageREOverTime(app, t_start, t_end)
 
+        plotInfo = getMeanPeaksandSTD(testData,n_bins)
+
+        flowIndex,weight = plotPointsInRERange(testData,[plotInfo[re_min],plotInfo[re_max]], plotInfo)
+        if all_flowIndex is None:
+            all_flowIndex = flowIndex
+            all_weights = weight
+        else:
+            all_flowIndex = np.append(all_flowIndex,flowIndex,axis=0)
+            all_weights = np.append(all_weights,weight,axis=0)
+
+    startingPositions = getStartingPositions(all_flowIndex,k_means,weighted=all_weights)
+
+    return startingPositions
 
 #%%
 nBins=400
 timeSets = [[0,10],[25,35],[50,60]]
-re_ranges_and_k_means = [['Zero','sigmaNegThree',8],['sigmaTwo','None',24]]
+re_ranges_and_k_means = [['Zero','sigmaNegThree',24],['sigmaTwo','None',92]]
 all_starting_points = None
-for t_start, t_end in timeSets:
-    for re_min,re_max,k_means in re_ranges_and_k_means:
+for re_min,re_max,k_means in re_ranges_and_k_means:
+    startingPostions = getAllStartingPoints(app,timeSets,nBins,re_min,re_max,k_means)
+    if all_starting_points is None:
+        all_starting_points= startingPostions
+        continue
+    all_starting_points = np.append(all_starting_points,startingPostions,axis=0)
 
-        startingPostions = getAllStartingPoint(app,t_start,t_end,nBins,re_min,re_max,k_means)
-        if all_starting_points is None:
-            all_starting_points= startingPostions
-            continue
-        all_starting_points = np.append(all_starting_points,startingPostions,axis=0)
-        print(f"Done {t_start} {t_end}")
 app.startingpoints = all_starting_points
 app.StartODE(reverse_integration=True)
 
 app.filterOutStreamsByLength()
-app.drawPlot()
+# app.drawPlot()
 app.write2bin("data","weightedMeans")
 print()
 
-# %%
-all_startingpoints = {}
-for time in app.distanceofWindStreams_index.keys():
-    all_startingpoints[time] = []
-    fig = plt.figure(figsize=(8, 6))
-    ax = fig.add_subplot(1, 1, 1, projection="3d")
-    data = app.timeReasults[time]
-    for i in app.distanceofWindStreams_index[time]:
-        x = data[i]["y"][0][0]
-        y = data[i]["y"][1][0]
-        z = data[i]["y"][2][0]
-        all_startingpoints[time].append([x, y, z])
-
-        ax.scatter(x, y, z, )
-    plt.show()
+# # %%
+# all_startingpoints = {}
+# for time in app.distanceofWindStreams_index.keys():
+#     all_startingpoints[time] = []
+#     fig = plt.figure(figsize=(8, 6))
+#     ax = fig.add_subplot(1, 1, 1, projection="3d")
+#     data = app.timeReasults[time]
+#     for i in app.distanceofWindStreams_index[time]:
+#         x = data[i]["y"][0][0]
+#         y = data[i]["y"][1][0]
+#         z = data[i]["y"][2][0]
+#         all_startingpoints[time].append([x, y, z])
+#
+#         ax.scatter(x, y, z, )
+#     plt.show()
 
 # %%
 

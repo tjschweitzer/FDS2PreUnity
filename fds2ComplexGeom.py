@@ -6,13 +6,16 @@ import json
 
 
 class fds2ComplexGeom:
-    def __init__(self, fds_input_location):
+    def __init__(self, fds_input_location,tree_id):
+        self.__treeID = tree_id
         self.__fds_input_location = fds_input_location
         self.__voxalSize = {}
         self.__meshBounds = {}
         self.__rowSpacing = 0
         self.__colSpacing = 0
+        self.__treeList = []
         self.readInFDS_Mesh()
+        self.readInTreeLocations()
         self.readInFDS_OBST()
         self.complex_geom()
         print()
@@ -47,6 +50,39 @@ class fds2ComplexGeom:
         self.nrows = len(self.topography[last_key])
         self.ncols = len(self.topography)
 
+    def readInTreeLocations(self):
+        with open(self.__fds_input_location) as f:
+            lines = f.readlines()
+
+        lineCounter = 0
+        while lineCounter < len(lines):
+            current_line = lines[lineCounter]
+            while "/" not in lines[lineCounter]:
+                lineCounter += 1
+                current_line = current_line + lines[lineCounter]
+                if "&INIT" in current_line and self.__treeID in current_line:
+                    treeLine = current_line.replace("/", "").replace("\n", "")
+                    XYZ_string = treeLine.split('XYZ=')[1].split(',')[:3]
+
+                    x= float(XYZ_string[0])
+
+                    y = float(XYZ_string[1])
+
+                    z = float(XYZ_string[0])
+
+                    tree_radius = treeLine.split('RADIUS=')[1].split(',')[0]
+
+
+                    tree_height = treeLine.split('HEIGHT=')[1].split(',')[0]
+
+                    currentTree = {"x":x,
+                                   "y":y,
+                                   "crownBaseHeight":z,
+                                   "crownRadius":tree_radius,
+                                   "crownHeight":tree_height,
+                                   "height":z}
+                    self.__treeList.append(currentTree)
+            lineCounter += 1
     def readInFDS_Mesh(self):
         with open(self.__fds_input_location) as f:
             lines = f.readlines()
@@ -232,6 +268,7 @@ class fds2ComplexGeom:
             "meshData": self.__meshBounds,
             "verts": vertices,
             "faces": faces,
+            "treeList": self.__treeList
         }
 
     def save2Json(self, filename):
@@ -247,7 +284,7 @@ class fds2ComplexGeom:
 
 def main(args):
     if len(args) == 0:
-        app = fds2ComplexGeom("/home/trent/Work/FDS2UnityTool/data/trails.fds")
+        app = fds2ComplexGeom("/home/trent/Trunk/Trunk/Trunk.fds","Generic Foliage")
         app.save2Json("data/testy.json")
         return
     if len(args) != 2:

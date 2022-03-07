@@ -10,7 +10,7 @@ import pyvista as pv
 
 class fdsOutputToUnity:
     def __init__(
-        self, fds_output_directory, fds_input_location, save_location, saveType="json"
+        self, fds_output_directory, fds_input_location, save_location, saveType="bin"
     ):
         self.directory = fds_output_directory
         self.qFiles = glob.glob(fds_output_directory + "*.q")
@@ -337,11 +337,11 @@ class fdsOutputToUnity:
                 len(mydict[title]) if title in mydict else 0
                 for title in headerCountTitles
             ],
-            dtype=np.int,
+            dtype=np.int32,
         )
         print(fileName, header)
-
-        with open(f"{newFileName.split('.q')[0]}", "wb") as outfile:
+        print(f"Saved to {newFileName}")
+        with open(f"{newFileName}", "wb") as outfile:
 
             np.ndarray.tofile(header, outfile)
 
@@ -370,36 +370,36 @@ class fdsOutputToUnity:
 # print( data, header[1:-1])
 if __name__ == "__main__":
 
-    mesh = sim.meshes[0]
-
-    extent = mesh.extent
-    # Select the last available timestep
-    t = -1
-    # Load 3D data for that timestep
-    pl_t1 = sim.data_3d[t]
-
-    # Create 3D grid
-    x_ = np.linspace(extent.x_start, extent.x_end, mesh.dimension["x"])
-    y_ = np.linspace(
-        extent.y_start, extent.y_end, mesh.dimension["y"]
-    )  # y_ = np.array([29])
-    z_ = np.linspace(extent.z_start, extent.z_end, mesh.dimension["z"])
-    x, y, z = np.meshgrid(x_, y_, z_, indexing="ij")
-    points = np.stack((x.flatten(), y.flatten(), z.flatten()), axis=1)
-
-    # Select a quantity
-    quantity_idx = pl_t1.get_quantity_index("U-VEL")
-    quantity = pl_t1.quantities[quantity_idx]
-
-    # Get 3D data for a specific quantity in one of the meshes
-    color_data = pl_t1[mesh].data[:, :, :, quantity_idx]
-    # It is also possible to just plot a slice
-    # color_data = pl_t1[mesh].data[:, 29:30, :, quantity_idx]
-
-    # Plot 3D dat
+    # mesh = sim.meshes[0]
+    #
+    # extent = mesh.extent
+    # # Select the last available timestep
+    # t = -1
+    # # Load 3D data for that timestep
+    # pl_t1 = sim.data_3d[t]
+    #
+    # # Create 3D grid
+    # x_ = np.linspace(extent.x_start, extent.x_end, mesh.dimension["x"])
+    # y_ = np.linspace(
+    #     extent.y_start, extent.y_end, mesh.dimension["y"]
+    # )  # y_ = np.array([29])
+    # z_ = np.linspace(extent.z_start, extent.z_end, mesh.dimension["z"])
+    # x, y, z = np.meshgrid(x_, y_, z_, indexing="ij")
+    # points = np.stack((x.flatten(), y.flatten(), z.flatten()), axis=1)
+    #
+    # # Select a quantity
+    # quantity_idx = pl_t1.get_quantity_index("U-VEL")
+    # quantity = pl_t1.quantities[quantity_idx]
+    #
+    # # Get 3D data for a specific quantity in one of the meshes
+    # color_data = pl_t1[mesh].data[:, :, :, quantity_idx]
+    # # It is also possible to just plot a slice
+    # # color_data = pl_t1[mesh].data[:, 29:30, :, quantity_idx]
+    #
+    # # Plot 3D dat
 
     startTime = time.time()
-    app = fdsOutputToUnity("E:\\fds3\\", "E:\\fds3\\fds\\trails.fds", "" "bin")
+    app = fdsOutputToUnity("/home/trent/Trunk/FireTime/", "/home/trent/Trunk/Trunk/Trunk.fds", "", "bin")
 
     app.findMaxValuesParallel()
     app.runParallel()
