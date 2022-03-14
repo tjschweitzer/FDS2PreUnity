@@ -6,12 +6,25 @@ import json
 import multiprocessing as mp
 import fdsreader as fds
 import pyvista as pv
+import h5py
 
 
 class fdsOutputToUnity:
     def __init__(
         self, fds_output_directory, fds_input_location, save_location, saveType="bin"
     ):
+
+        self.sim = fds.Simulation(fds_output_directory)
+        pl_t1 = self.sim.data_3d[-1]
+        try:
+            self.hrr_idx = pl_t1.get_quantity_index("hrrpuv")
+        except:
+            quit("FDS Simulation requires HRRPUV in plot3d")
+        mesh = self.sim.meshes[0]
+        self.__timeList = np.array(self.sim.data_3d.times)
+        for t in range(len(self.__timeList)):
+            pl_t1 = self.sim.data_3d[t][mesh].file_path
+            print(pl_t1)
         self.directory = fds_output_directory
         self.qFiles = glob.glob(fds_output_directory + "*.q")
         self.fileCounter = 0
@@ -366,6 +379,52 @@ class fdsOutputToUnity:
             np.ndarray.tofile(np.array(allData, dtype=np.float32), outfile)
             print(fileName, "saved")
 
+    def write2H5py(self, mydict, fileName):
+
+        newFileName = (
+            "_".join(fileName.split("_")[:-3])
+            + "_1_"
+            + "_".join(fileName.split("_")[-2:])
+        )
+        newFileName = newFileName.split(".q")[0] + ".bin"
+        newFileName = self.save_location + os.path.basename(newFileName)
+        headerCountTitles = ["smoke", "U-VELOCITY", "V-VELOCITY", "W-VELOCITY", "fire"]
+        # header {number of eachtype of value to be saved  } 'DENSITY','U-VELOCITY','V-VELOCITY','W-VELOCITY','HRRPUV'
+
+        header = np.array(
+            [
+                len(mydict[title]) if title in mydict else 0
+                for title in headerCountTitles
+            ],
+            dtype=np.int32,
+        )
+        print(fileName, header)
+        print(f"Saved to {newFileName}")
+        with open(f"{newFileName}", "wb") as outfile:
+
+            np.ndarray.tofile(header, outfile)
+
+            allData = []
+            for i in range(self.lenHeaderCountTitles):
+                h = headerCountTitles[i]
+
+                if h not in mydict:
+                    continue
+                for j in range(header[i]):
+                    point = mydict[h][j]
+                    allData.append(point["X"])
+                    allData.append(point["Y"])
+                    allData.append(point["Z"])
+
+                    allData.append(point["Datum"])
+
+            print("min", self.minValues)
+            print("max", self.maxValues)
+            np.ndarray.tofile(np.array(self.minValues, dtype=np.float32), outfile)
+            np.ndarray.tofile(np.array(self.maxValues, dtype=np.float32), outfile)
+            np.ndarray.tofile(np.array(allData, dtype=np.float32), outfile)
+            print(fileName, "saved")
+
 
 # print( data, header[1:-1])
 if __name__ == "__main__":
@@ -399,7 +458,7 @@ if __name__ == "__main__":
     # # Plot 3D dat
 
     startTime = time.time()
-    app = fdsOutputToUnity("/home/trent/Trunk/FireTime/", "/home/trent/Trunk/Trunk/Trunk.fds", "", "bin")
+    app = fdsOutputToUnity("/home/kl3pt0/Trunk/Fire/", "/home/kl3pt0/Trunk/Trunk/Trunk.fds", "", "bin")
 
     app.findMaxValuesParallel()
     app.runParallel()

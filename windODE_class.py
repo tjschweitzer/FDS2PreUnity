@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 from scipy.signal import find_peaks
 from scipy.integrate import solve_ivp
 from matplotlib import cm
+import h5py
 
 import pandas as pd
 import numpy as np
@@ -331,6 +332,44 @@ class windODE:
 
         return self
 
+    def writeH5py(self, desired_directory, file_name_prefix):
+        fileName = os.path.join(desired_directory, file_name_prefix)
+        allData = self.timeReasults
+        maxVel = self.__maxVelocity
+        maxRe = self.__maxRe
+        print(f"Max {maxVel}")
+        for time in allData.keys():
+            data = allData[time]
+            numberofWindstreams = len(data)
+            lengthofWindStreams = [len(x["y"][0]) for x in data]
+            print(numberofWindstreams)
+            print(lengthofWindStreams)
+            time_string = f"{time}".split(".")[1]
+
+            with h5py.File(f"{fileName}_{int(time)}_{time_string}.hdf5", "w") as f:
+                dset = f.create_dataset("maxValue", data=maxVel)
+
+                f_numberofWindstreams = f.create_dataset("numberofWindstreams",data=np.array([numberofWindstreams], dtype=np.int32))
+                f_lengthofWindStreams=f.create_dataset("lengthofWindStreams",data=np.array(lengthofWindStreams, dtype=np.int32))
+                f_lengthofWindStreams=[]
+                for i in range(numberofWindstreams):
+                    currentStream = []
+                    for j in range(len(data[i]["y"][0])):
+                        currentStream.append(
+                            [
+                                data[i]["t"][j],
+                                data[i]["re"][j],
+                                data[i]["y"][0][j],
+                                data[i]["y"][1][j],
+                                data[i]["y"][2][j],
+                            ]
+                        )
+                    print(i+1)
+                    f_lengthofWindStreams.append( f.create_dataset(f"windStream_{i+1}", data=np.array(currentStream, dtype=np.float32)))
+                print(fileName, "saved")
+
+        return self
+
     def get_velocity(self, t, x):
 
         counter = self.__GetClosestTimeStepIndex(t)
@@ -561,9 +600,9 @@ class windODE:
 
 fds_loc = "/home/trent/Trunk/Trunk/Trunk.fds"
 dir = "/home/trent/Trunk/FireTime"
-# fds_loc = "/home/kl3pt0/Trunk/Trunk/Trunk.fds"
-# dir = "/home/kl3pt0/Trunk/Fire"
-#
+fds_loc = "/home/kl3pt0/Trunk/Trunk/Trunk.fds"
+dir = "/home/kl3pt0/Trunk/Fire"
+
 # fds_loc = "E:\Trunk\Trunk\Trunk\Trunk.fds"
 
 # dir = "E:\Trunk\Trunk\\Fire\\"
@@ -771,7 +810,7 @@ app.StartODE(reverse_integration=True)
 
 app.filterOutStreamsByLength()
 # app.drawPlot()
-app.write2bin("data","weightedMeans")
+app.writeH5py("data","weightedMeans")
 print()
 
 # # %%
