@@ -386,7 +386,8 @@ class fdsOutputToUnity:
             + "_1_"
             + "_".join(fileName.split("_")[-2:])
         )
-        newFileName = newFileName.split(".q")[0] + ".bin"
+        newFileName = newFileName.split(".q")[0] + ".hdf5"
+
         newFileName = self.save_location + os.path.basename(newFileName)
         headerCountTitles = ["smoke", "U-VELOCITY", "V-VELOCITY", "W-VELOCITY", "fire"]
         # header {number of eachtype of value to be saved  } 'DENSITY','U-VELOCITY','V-VELOCITY','W-VELOCITY','HRRPUV'

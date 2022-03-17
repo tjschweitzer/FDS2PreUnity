@@ -67,6 +67,7 @@ class windODE:
         self.__REDict = defaultdict(lambda: [])
         self.startingpoints = []
         self.__meshBounds = self.sim.meshes[0]
+        self.__meshBounds = self.sim.meshes[0]
         self.__meshExtent = self.sim.meshes[0].extent
 
         self.setVoxalSize()
@@ -347,10 +348,10 @@ class windODE:
             time_string = f"{time}".split(".")[1]
 
             with h5py.File(f"{fileName}_{int(time)}_{time_string}.hdf5", "w") as f:
-                dset = f.create_dataset("maxValue", data=maxVel)
+                dset = f.create_dataset("maxValue", data=[ np.max(np.array(self.__REDict[time])), np.max(np.array(self.__REDict[time]))])
 
-                f_numberofWindstreams = f.create_dataset("numberofWindstreams",data=np.array([numberofWindstreams], dtype=np.int32))
-                f_lengthofWindStreams=f.create_dataset("lengthofWindStreams",data=np.array(lengthofWindStreams, dtype=np.int32))
+                f_numberofWindstreams = f.create_dataset("numberofWindstreams",data=np.array([numberofWindstreams], dtype=np.int64))
+                f_lengthofWindStreams=f.create_dataset("lengthofWindStreams",data=np.array(lengthofWindStreams, dtype=np.int64))
                 f_lengthofWindStreams=[]
                 for i in range(numberofWindstreams):
                     currentStream = []
@@ -364,9 +365,8 @@ class windODE:
                                 data[i]["y"][2][j],
                             ]
                         )
-                    print(i+1)
-                    f_lengthofWindStreams.append( f.create_dataset(f"windStream_{i+1}", data=np.array(currentStream, dtype=np.float32)))
-                print(fileName, "saved")
+                    f_lengthofWindStreams.append( f.create_dataset(f"windStream_{i+1}", data=np.array(currentStream, dtype=float)))
+                print(f"{fileName}_{int(time)}_{time_string}.hdf5", "saved")
 
         return self
 
@@ -463,7 +463,6 @@ class windODE:
             fig = plt.figure(figsize=(8, 6))
             ax = fig.add_subplot(1, 1, 1, projection="3d")
             for i in self.distanceofWindStreams_index[time]:
-                print(data[i]["y"][0][:])
                 x = data[i]["y"][0][:]
                 y = data[i]["y"][1][:]
                 z = data[i]["y"][2][:]
@@ -598,19 +597,6 @@ class windODE:
 # %%
 
 
-fds_loc = "/home/trent/Trunk/Trunk/Trunk.fds"
-dir = "/home/trent/Trunk/FireTime"
-fds_loc = "/home/kl3pt0/Trunk/Trunk/Trunk.fds"
-dir = "/home/kl3pt0/Trunk/Fire"
-
-# fds_loc = "E:\Trunk\Trunk\Trunk\Trunk.fds"
-
-# dir = "E:\Trunk\Trunk\\Fire\\"
-
-t_span = [0, 16]
-start_time = time.perf_counter()
-app = windODE(dir, fds_loc, t_span, 100)
-# app.EvaluateReynoldsValues()
 
 
 # app.getStartingPoints()
@@ -621,13 +607,9 @@ app = windODE(dir, fds_loc, t_span, 100)
 # app.filterOutStreamsByLength()
 # app.write2bin("data","temp")
 
-print(f"Total Time {time.perf_counter() - start_time:0.4f}")
-# app.drawPlot()
-print()
 
 
-plot_Flag = False
-# %%
+
 def getAverageREOverTime(app, t_start, t_end):
     allTimelist = app.getTimeList()
     filteredTimeList = allTimelist[allTimelist >= t_start]
@@ -685,10 +667,11 @@ def getMeanPeaksandSTD(reMatrix, n_bins):
                   'bins': bins,
                   'mean': dataMean,
                   'std': dataStd,
+                  'sigmaOne': dataMean+dataStd ,
                   'sigmaTwo': dataSig2,
                   'sigmaNegThree': dataSigNeg3,
                   'None':None,
-                  'Zero':0}
+                  'zero':0}
     return returnDict
 
 
@@ -794,9 +777,25 @@ def getAllStartingPoints(app,t_range, n_bins, re_min,re_max,k_means):
     return startingPositions
 
 #%%
+
+plot_Flag = False
+
+fds_loc = "/home/trent/Trunk/Trunk/Trunk.fds"
+dir = "/home/trent/Trunk/FireTime"
+fds_loc = "/home/kl3pt0/Trunk/Trunk/Trunk.fds"
+dir = "/home/kl3pt0/Trunk/Fire"
+
+fds_loc = "E:\Trunk\Trunk\Trunk\Trunk.fds"
+dir = "E:\Trunk\Trunk\\FireTime\\"
+
+t_span = [0, 60]
+start_time = time.perf_counter()
+app = windODE(dir, fds_loc, t_span, 100)
+# app.EvaluateReynoldsValues()
+
 nBins=400
-timeSets = [[0,10],[25,35],[50,60]]
-re_ranges_and_k_means = [['Zero','sigmaNegThree',24],['sigmaTwo','None',92]]
+timeSets = [[0,10],[40,50],[80,90]]
+re_ranges_and_k_means = [['zero','sigmaNegThree',25],['sigmaTwo','None',76]]
 all_starting_points = None
 for re_min,re_max,k_means in re_ranges_and_k_means:
     startingPostions = getAllStartingPoints(app,timeSets,nBins,re_min,re_max,k_means)
@@ -812,6 +811,9 @@ app.filterOutStreamsByLength()
 # app.drawPlot()
 app.writeH5py("data","weightedMeans")
 print()
+print(f"Total Time {time.perf_counter() - start_time:0.4f}")
+
+print(app.getMaxRE())
 
 # # %%
 # all_startingpoints = {}
