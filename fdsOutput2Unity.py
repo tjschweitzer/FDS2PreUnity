@@ -458,7 +458,9 @@ if __name__ == "__main__":
     # # Plot 3D dat
 
     startTime = time.time()
-    app = fdsOutputToUnity("/home/kl3pt0/Trunk/Fire/", "/home/kl3pt0/Trunk/Trunk/Trunk.fds", "", "bin")
+    app = fdsOutputToUnity(
+        "/home/trent/Trunk/TimeDelay/", "/home/trent/Trunk/Trunk/Trunk.fds", "", "bin"
+    )
 
     app.findMaxValuesParallel()
     app.runParallel()
