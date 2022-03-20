@@ -59,8 +59,8 @@ class fds2ComplexGeom:
 
             lineCounter += 1
         print(counter, "Terrain object found")
-        self.nrows = len(self.topography[last_key])
-        self.ncols = len(self.topography)
+        self.nrows = len(self.topography[last_key])-1
+        self.ncols = len(self.topography)-1
 
     def readInTreeLocations(self):
         with open(self.__fds_input_location) as f:
@@ -76,7 +76,7 @@ class fds2ComplexGeom:
                     treeLine = current_line.replace("/", "").replace("\n", "")
                     XYZ_string = treeLine.split('XYZ=')[1].split(',')[:3]
 
-                    x= float(XYZ_string[0])
+                    x = float(XYZ_string[0])
 
                     y = float(XYZ_string[1])
 
@@ -95,6 +95,7 @@ class fds2ComplexGeom:
                                    "height":z}
                     self.__treeList.append(currentTree)
             lineCounter += 1
+
     def readInFDS_Mesh(self):
         with open(self.__fds_input_location) as f:
             lines = f.readlines()
@@ -172,15 +173,15 @@ class fds2ComplexGeom:
                 vertCounter += 1
                 if j == self.ncols - 1:
                     vertices[vertCounter + self.nrows] = [
-                        x2,
-                        z1,
+                        x1,
+                        z2,
                         y2,
                     ]
-                    vertices[vertCounter + self.nrows + offset] = [x2, z1, y1]
+                    vertices[vertCounter + self.nrows + offset] = [x1, z2, y1]
 
                 if i == self.nrows - 1:
-                    vertices[vertCounter] = [x1, z2, y2]
-                    vertices[vertCounter + offset] = [x1, z2, y1]
+                    vertices[vertCounter] = [x2, z1, y2]
+                    vertices[vertCounter + offset] = [x2, z1, y1]
                     vertCounter += 1
                     if j == self.ncols - 1:
                         vertices[vertCounter + self.nrows] = [x1, z1, y2]
@@ -210,7 +211,7 @@ class fds2ComplexGeom:
                 faces.append([C, B, D])
                 faceCounter += 1
             faceCounter += 1
-
+        print(faceCounter)
         # Right Side
         for i in range(1, self.nrows + 1):
             C = i

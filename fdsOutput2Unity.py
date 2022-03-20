@@ -386,8 +386,7 @@ class fdsOutputToUnity:
             + "_1_"
             + "_".join(fileName.split("_")[-2:])
         )
-        newFileName = newFileName.split(".q")[0] + ".hdf5"
-
+        newFileName = newFileName.split(".q")[0] + ".bin"
         newFileName = self.save_location + os.path.basename(newFileName)
         headerCountTitles = ["smoke", "U-VELOCITY", "V-VELOCITY", "W-VELOCITY", "fire"]
         # header {number of eachtype of value to be saved  } 'DENSITY','U-VELOCITY','V-VELOCITY','W-VELOCITY','HRRPUV'
@@ -459,7 +458,9 @@ if __name__ == "__main__":
     # # Plot 3D dat
 
     startTime = time.time()
-    app = fdsOutputToUnity("/home/kl3pt0/Trunk/Fire/", "/home/kl3pt0/Trunk/Trunk/Trunk.fds", "", "bin")
+    app = fdsOutputToUnity(
+        "/home/trent/Trunk/TimeDelay/", "/home/trent/Trunk/Trunk/Trunk.fds", "", "bin"
+    )
 
     app.findMaxValuesParallel()
     app.runParallel()

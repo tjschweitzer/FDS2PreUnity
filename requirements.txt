@@ -19,7 +19,3 @@ typing_extensions==4.0.1
 
 fdsreader~=1.4.1
 pyvista~=0.33.2
-pandas~=1.4.1
-h5py~=3.6.0
-sklearn~=0.0
-scikit-learn~=1.0.2
