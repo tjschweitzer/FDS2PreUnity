@@ -845,14 +845,14 @@ fds_loc = "E:\Trunk\Trunk\Trunk\Trunk.fds"
 
 dir = "E:\Trunk\Trunk\\SableWindRE\\"
 
-t_span = [15, 16]
+t_span = [0, 22]
 start_time = time.perf_counter()
 app = windODE(dir, fds_loc, t_span, )
 # app.EvaluateReynoldsValues()
 
 nBins = 800
 timeSets = [[0, 20]]
-re_ranges_and_k_means = [ [0,"sigmaNegTwo", 25],["sigmaTwo","None",76]]
+re_ranges_and_k_means = [ [0,"sigmaNegTwo", 12],["sigmaTwo","None",38]]
 all_starting_points = None
 for re_min, re_max, k_means in re_ranges_and_k_means:
     startingPostions = app.getAllStartingPoints(
@@ -877,8 +877,8 @@ app.startingpoints = all_starting_points
 app.StartODE(reverse_integration=True)
 
 app.filterOutStreamsByLength()
-app.drawPlot3D()
-# app.writeH5py("data", "weightedMeans")
+# app.drawPlot3D()
+app.writeH5py("data", "weightedMeans")
 print()
 
 
