@@ -6,7 +6,9 @@ import json
 
 
 class fds2ComplexGeom:
-    def __init__(self, fds_input_location, tree_id):
+
+    def __init__(self, fds_input_location,tree_id,non_terrainobsts=[]):
+
         self.__treeID = tree_id
         self.__fds_input_location = fds_input_location
         self.__voxalSize = {}
@@ -14,6 +16,7 @@ class fds2ComplexGeom:
         self.__rowSpacing = 0
         self.__colSpacing = 0
         self.__treeList = []
+        self.__nonTerrainObsts = non_terrainobsts
         self.readInFDS_Mesh()
         self.readInTreeLocations()
         self.readInFDS_OBST()
@@ -21,6 +24,7 @@ class fds2ComplexGeom:
         print()
 
     def readInFDS_OBST(self):
+        counter = 0
         self.topography = defaultdict(lambda: {})
         last_key = ""
         with open(self.__fds_input_location) as f:
@@ -33,22 +37,32 @@ class fds2ComplexGeom:
 
                 lineCounter += 1
                 current_line = current_line + lines[lineCounter]
-            if "&OBST" in current_line:
+            terrainFlag = True
+            for nonTerrainObs in self.__nonTerrainObsts:
+                if nonTerrainObs in current_line:
 
+                    terrainFlag = False
+
+            if "&OBST" in current_line and terrainFlag :
+                print(current_line)
+                counter +=1
                 XB = [
                     float(point)
                     for point in current_line.split("XB=")[1].split(",")[:6]
                 ]
                 self.topography[XB[0]][XB[2]] = XB[-1]
+                self.topography[XB[0]][XB[3]] = XB[-1]
+                self.topography[XB[1]][XB[2]] = XB[-1]
+                self.topography[XB[1]][XB[3]] = XB[-1]
                 last_key = XB[0]
                 self.__colSpacing = abs(XB[2] - XB[3])
 
                 self.__rowSpacing = abs(XB[0] - XB[1])
 
             lineCounter += 1
-
-        self.nrows = len(self.topography[last_key])
-        self.ncols = len(self.topography)
+        print(counter, "Terrain object found")
+        self.nrows = len(self.topography[last_key])-1
+        self.ncols = len(self.topography)-1
 
     def readInTreeLocations(self):
         with open(self.__fds_input_location) as f:
@@ -68,7 +82,7 @@ class fds2ComplexGeom:
 
                     y = float(XYZ_string[1])
 
-                    z = float(XYZ_string[0])
+                    z = float(XYZ_string[2])
 
                     tree_radius = treeLine.split("RADIUS=")[1].split(",")[0]
 
@@ -146,10 +160,10 @@ class fds2ComplexGeom:
         for j in range(self.ncols):
             rowKeys = sorted(self.topography[colKeys[j]].keys())[::-1]
             for i in range(self.nrows):
-                x1 = colKeys[j]
-                x2 = colKeys[j] + self.__colSpacing
-                z1 = rowKeys[i]
-                z2 = rowKeys[i] + self.__rowSpacing
+                x2 = colKeys[j]
+                x1 = colKeys[j] - self.__colSpacing
+                z2 = rowKeys[i]
+                z1 = rowKeys[i] - self.__rowSpacing
                 y1 = self.__meshBounds["Z_MIN"]
                 y2 = self.topography[colKeys[j]][rowKeys[i]]
 
@@ -162,15 +176,15 @@ class fds2ComplexGeom:
                 vertCounter += 1
                 if j == self.ncols - 1:
                     vertices[vertCounter + self.nrows] = [
-                        x2,
-                        z1,
+                        x1,
+                        z2,
                         y2,
                     ]
-                    vertices[vertCounter + self.nrows + offset] = [x2, z1, y1]
+                    vertices[vertCounter + self.nrows + offset] = [x1, z2, y1]
 
                 if i == self.nrows - 1:
-                    vertices[vertCounter] = [x1, z2, y2]
-                    vertices[vertCounter + offset] = [x1, z2, y1]
+                    vertices[vertCounter] = [x2, z1, y2]
+                    vertices[vertCounter + offset] = [x2, z1, y1]
                     vertCounter += 1
                     if j == self.ncols - 1:
                         vertices[vertCounter + self.nrows] = [x1, z1, y2]
@@ -200,7 +214,7 @@ class fds2ComplexGeom:
                 faces.append([C, B, D])
                 faceCounter += 1
             faceCounter += 1
-
+        print(faceCounter)
         # Right Side
         for i in range(1, self.nrows + 1):
             C = i
@@ -286,8 +300,10 @@ class fds2ComplexGeom:
 
 def main(args):
     if len(args) == 0:
-        app = fds2ComplexGeom("/home/trent/Trunk/Trunk/Trunk.fds", "Generic Foliage")
-        app.save2Json("data/testy.json")
+
+        app = fds2ComplexGeom("E:\\Trunk\\Trunk\\Trunk\\Trunk.fds","Generic Foliage",["Trunk"])
+        app.save2Json("data\\testy.json")
+
         return
     if len(args) != 2:
         print("Useage : fds2ComplexGeom {fds Input File} {save Location}")
