@@ -6,8 +6,7 @@ import json
 
 
 class fds2ComplexGeom:
-
-    def __init__(self, fds_input_location,tree_id,non_terrainobsts=[]):
+    def __init__(self, fds_input_location, tree_id, non_terrainobsts=[]):
 
         self.__treeID = tree_id
         self.__fds_input_location = fds_input_location
@@ -43,9 +42,9 @@ class fds2ComplexGeom:
 
                     terrainFlag = False
 
-            if "&OBST" in current_line and terrainFlag :
+            if "&OBST" in current_line and terrainFlag:
                 print(current_line)
-                counter +=1
+                counter += 1
                 XB = [
                     float(point)
                     for point in current_line.split("XB=")[1].split(",")[:6]
@@ -61,8 +60,8 @@ class fds2ComplexGeom:
 
             lineCounter += 1
         print(counter, "Terrain object found")
-        self.nrows = len(self.topography[last_key])-1
-        self.ncols = len(self.topography)-1
+        self.nrows = len(self.topography[last_key]) - 1
+        self.ncols = len(self.topography) - 1
 
     def readInTreeLocations(self):
         with open(self.__fds_input_location) as f:
@@ -301,7 +300,9 @@ class fds2ComplexGeom:
 def main(args):
     if len(args) == 0:
 
-        app = fds2ComplexGeom("E:\\Trunk\\Trunk\\Trunk\\Trunk.fds","Generic Foliage",["Trunk"])
+        app = fds2ComplexGeom(
+            "E:\\Trunk\\Trunk\\Trunk\\Trunk.fds", "Generic Foliage", ["Trunk"]
+        )
         app.save2Json("data\\testy.json")
 
         return
