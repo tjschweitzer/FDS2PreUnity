@@ -5,30 +5,21 @@
 # pandas
 # %%
 # Import the required modules
-import glob
+
 import time
 import os
 from collections import defaultdict
 import fdsreader as fds
-import matplotlib.pyplot as plt
 from scipy.signal import find_peaks
 from scipy.integrate import solve_ivp
-from matplotlib import cm
 import h5py
-
 import pandas as pd
 import numpy as np
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
 from sklearn.metrics import pairwise_distances_argmin_min
-import pickle
-
-from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.pyplot as plt
 from matplotlib import cm
-from mpl_toolkits.mplot3d import axes3d
-from matplotlib import animation
-
 # %%
 
 
@@ -56,129 +47,133 @@ class windODE:
 
         self.sim = fds.Simulation(directory)
         self.fds_input_location = fds_input_location
-        self.t_span = t_span
-        self.__directory = directory
-        self.__qFiles = glob.glob(directory + "*.q")
+        self.__t_span = t_span
+        # self.__directory = directory
+        # self.__qFiles = glob.glob(directory + "*.q")
         self.__timeList = np.array(self.sim.data_3d.times)
-        self.__voxalSize = {}
+        self.__voxel_size = {}
         self.__maxVelocity = 0.0
         self.__maxRe = 0.0
         self.__REDict = defaultdict(lambda: [])
-        self.startingpoints = []
+        self.starting_points = []
         self.__meshBounds = self.sim.meshes[0]
         self.__meshExtent = self.sim.meshes[0].extent
+        self.__n_bins=800
+        self.__ratio = .15
+        self.__time_results = {}
+        self.filteredTImeResults = {}
 
-        self.setVoxalSize()
+        self.distance_of_wind_streams_index = defaultdict(lambda: [])
+        self.__set_voxel_size()
 
-    def setVoxalSize(self):
+    def __set_voxel_size(self):
         """
         Calculates voxal size
         :return:
         """
 
-        self.__voxalSize["vx"] = (
+        self.__voxel_size["vx"] = (
             self.__meshExtent.x_end - self.__meshExtent.x_start
         ) / (self.__meshBounds.dimension["x"] - 1)
-        self.__voxalSize["vz"] = (
+        self.__voxel_size["vz"] = (
             self.__meshExtent.z_end - self.__meshExtent.z_start
         ) / (self.__meshBounds.dimension["z"] - 1)
-        self.__voxalSize["vy"] = (
+        self.__voxel_size["vy"] = (
             self.__meshExtent.y_end - self.__meshExtent.y_start
         ) / (self.__meshBounds.dimension["y"] - 1)
         return self
 
-    def getVoxalSize(self):
-        return self.__voxalSize
+    def get_position_from_index(self, x):
+        """
 
-    def getPositionFromIndex(self, x):
+        :param x:
+        :return:
+        """
         x_index = x[0]
         y_index = x[1]
         z_index = x[2]
-        x_position = self.__meshExtent.x_start + x_index * self.__voxalSize["vx"]
-        y_position = self.__meshExtent.y_start + y_index * self.__voxalSize["vy"]
-        z_position = self.__meshExtent.z_start + z_index * self.__voxalSize["vz"]
+        x_position = self.__meshExtent.x_start + x_index * self.__voxel_size["vx"]
+        y_position = self.__meshExtent.y_start + y_index * self.__voxel_size["vy"]
+        z_position = self.__meshExtent.z_start + z_index * self.__voxel_size["vz"]
         return [x_position, y_position, z_position]
 
-    def getStartingPoints(self):
-
+    def get_starting_points(self):
         """
         Creates a list of points  on the outer most voxals of OBSTS, one point per voxal
-        :var X_Min_Value center point of minimum x voxal
-        :var X_Max_Value center point of maximum x voxal
-        :var Y_Min_Value center point of minimum y voxal
-        :var Y_Max_Value center point of maximum y voxal
+        :var x_min_value center point of minimum x voxal
+        :var x_max_value center point of maximum x voxal
+        :var y_min_value center point of minimum y voxal
+        :var y_max_value center point of maximum y voxal
 
         :return:
         """
-        X_Min_Value = self.__meshExtent.x_start + self.__voxalSize["vx"] / 2.0
-        X_Max_Value = self.__meshExtent.x_end - self.__voxalSize["vx"] / 2.0
-        Y_Min_Value = self.__meshExtent.y_start + self.__voxalSize["vy"] / 2.0
-        Y_Max_Value = self.__meshExtent.y_end - self.__voxalSize["vy"] / 2.0
+        x_min_value = self.__meshExtent.x_start + self.__voxel_size["vx"] / 2.0
+        x_max_value = self.__meshExtent.x_end - self.__voxel_size["vx"] / 2.0
+        y_min_value = self.__meshExtent.y_start + self.__voxel_size["vy"] / 2.0
+        y_max_value = self.__meshExtent.y_end - self.__voxel_size["vy"] / 2.0
         with open(self.fds_input_location) as f:
             lines = f.readlines()
 
-        lineCounter = 0
-        while lineCounter < len(lines):
-            current_line = lines[lineCounter]
+        line_counter = 0
+        while line_counter < len(lines):
+            current_line = lines[line_counter]
             if current_line == "\n":
-                lineCounter += 1
+                line_counter += 1
                 continue
-            while "/" not in lines[lineCounter]:
-                lineCounter += 1
-                current_line = current_line + lines[lineCounter]
+            while "/" not in lines[line_counter]:
+                line_counter += 1
+                current_line = current_line + lines[line_counter]
 
-            lineCounter += 1
+            line_counter += 1
             if "&OBST" not in current_line:
                 continue
             mesh_line = current_line.replace("/", "").replace("\n", "")
             XB = [float(point) for point in mesh_line.split("XB=")[1].split(",")[:6]]
 
-            if XB[0] <= X_Min_Value <= XB[1]:
+            if XB[0] <= x_min_value <= XB[1]:
                 self.startingPointsRibbon(
-                    [XB[0], XB[2], XB[5] + self.__voxalSize["vz"]],
-                    [XB[0], XB[3], XB[5] + self.__voxalSize["vz"]],
-                    int((XB[1] - XB[0]) / self.__voxalSize["vx"]),
+                    [XB[0], XB[2], XB[5] + self.__voxel_size["vz"]],
+                    [XB[0], XB[3], XB[5] + self.__voxel_size["vz"]],
+                    int((XB[1] - XB[0]) / self.__voxel_size["vx"]),
                 )
 
-            if XB[0] <= X_Max_Value <= XB[1]:
+            if XB[0] <= x_max_value <= XB[1]:
                 self.startingPointsRibbon(
-                    [XB[1], XB[2], XB[5] + self.__voxalSize["vz"]],
-                    [XB[1], XB[3], XB[5] + self.__voxalSize["vz"]],
-                    int((XB[1] - XB[0]) / self.__voxalSize["vx"]),
+                    [XB[1], XB[2], XB[5] + self.__voxel_size["vz"]],
+                    [XB[1], XB[3], XB[5] + self.__voxel_size["vz"]],
+                    int((XB[1] - XB[0]) / self.__voxel_size["vx"]),
                 )
-            if XB[2] <= Y_Min_Value <= XB[3]:
+            if XB[2] <= y_min_value <= XB[3]:
                 self.startingPointsRibbon(
-                    [XB[0], XB[2], XB[5] + self.__voxalSize["vz"]],
-                    [XB[1], XB[2], XB[5] + self.__voxalSize["vz"]],
-                    int((XB[3] - XB[2]) / self.__voxalSize["vy"]),
+                    [XB[0], XB[2], XB[5] + self.__voxel_size["vz"]],
+                    [XB[1], XB[2], XB[5] + self.__voxel_size["vz"]],
+                    int((XB[3] - XB[2]) / self.__voxel_size["vy"]),
                 )
-            if XB[2] <= Y_Max_Value <= XB[3]:
+            if XB[2] <= y_max_value <= XB[3]:
                 self.startingPointsRibbon(
-                    [XB[0], XB[3], XB[5] + self.__voxalSize["vz"]],
-                    [XB[1], XB[3], XB[5] + self.__voxalSize["vz"]],
-                    int((XB[3] - XB[2]) / self.__voxalSize["vy"]),
+                    [XB[0], XB[3], XB[5] + self.__voxel_size["vz"]],
+                    [XB[1], XB[3], XB[5] + self.__voxel_size["vz"]],
+                    int((XB[3] - XB[2]) / self.__voxel_size["vy"]),
                 )
 
         return self
 
-    def filterOutStreamsByLength(self):
+    def filter_streams_by_length(self):
         """
         This function removes all streamlines that total distance traveled is below a desired length.
         :return:
         """
-        self.filteredTImeResults = {}
 
-        self.distanceofWindStreams_index = defaultdict(lambda: [])
-        allData = self.timeReasults
-        for time in allData.keys():
+        all_time_data = self.__time_results
+        for time_data in all_time_data.keys():
 
-            data = allData[time]
-            numberofWindstreams = len(data)
-            lengthofWindStreams = [len(x["y"][0]) for x in data]
-            print(numberofWindstreams)
-            print(lengthofWindStreams)
-            for i in range(numberofWindstreams):
-                distanceofWindStream = 0
+            data = all_time_data[time_data]
+            number_of_wind_streams = len(data)
+            length_of_wind_streams = [len(x["y"][0]) for x in data]
+            print(number_of_wind_streams)
+            print(length_of_wind_streams)
+            for i in range(number_of_wind_streams):
+                distance_of_wind_stream = 0
                 for j in range(1, len(data[i]["y"][0])):
                     point1 = np.array(
                         (
@@ -191,10 +186,10 @@ class windODE:
                         (data[i]["y"][0][j], data[i]["y"][1][j], data[i]["y"][2][j])
                     )
                     p1_p2_distance = np.linalg.norm(point1 - point2)
-                    distanceofWindStream += p1_p2_distance
+                    distance_of_wind_stream += p1_p2_distance
 
-                if distanceofWindStream > np.min(list(self.__voxalSize.values())) * 2.0:
-                    self.distanceofWindStreams_index[time].append(i)
+                if distance_of_wind_stream > np.min(list(self.__voxel_size.values())) * 2.0:
+                    self.distance_of_wind_streams_index[time_data].append(i)
 
     def startingPointsRibbon(self, starting_pont, ending_point, number_of_points):
         x_ = np.linspace(starting_pont[0], ending_point[0], number_of_points)
@@ -202,7 +197,7 @@ class windODE:
         z_ = np.linspace(starting_pont[2], ending_point[2], number_of_points)
         points = np.stack((x_.flatten(), y_.flatten(), z_.flatten()), axis=1)
 
-        self.startingpoints.extend(points)
+        self.starting_points.extend(points)
         return self
 
     def runODE(self, time_step_index, reverse_integration=False):
@@ -215,8 +210,8 @@ class windODE:
         if reverse_integration:
             t_span[1] = 0.0
 
-        for startCounter in range(len(self.startingpoints)):
-            y0 = self.startingpoints[startCounter]
+        for startCounter in range(len(self.starting_points)):
+            y0 = self.starting_points[startCounter]
 
             result_solve_ivp = solve_ivp(
                 self.get_velocity,
@@ -245,18 +240,17 @@ class windODE:
 
     def StartODE(self, reverse_integration=True):
 
-        self.timeReasults = {}
         for t_start in self.__timeList:
-            if t_start > self.t_span[1] or t_start < self.t_span[0]:
+            if t_start > self.__t_span[1] or t_start < self.__t_span[0]:
                 continue
 
-            time_step_index = self.__GetClosestTimeStepIndex(t_start)
+            time_step_index = self.__get_closest_time_step_index(t_start)
 
             all_results = self.runODE(time_step_index)
             if reverse_integration:
                 backward = self.runODE(time_step_index, True)
                 all_results = self.combineODEFrames(all_results, backward)
-            self.timeReasults[t_start] = all_results
+            self.__time_results[t_start] = all_results
 
         return self
 
@@ -294,7 +288,7 @@ class windODE:
 
     def write2bin(self, desired_directory, file_name_prefix):
         fileName = os.path.join(desired_directory, file_name_prefix)
-        allData = self.timeReasults
+        allData = self.__time_results
         maxVel = self.__maxVelocity
         maxRe = self.__maxRe
         print(f"Max {maxVel}")
@@ -339,7 +333,7 @@ class windODE:
 
     def writeH5py(self, desired_directory, file_name_prefix):
         fileName = os.path.join(desired_directory, file_name_prefix)
-        allData = self.timeReasults
+        allData = self.__time_results
         maxVel = self.__maxVelocity
         maxRe = self.__maxRe
         print(f"Max {maxVel}")
@@ -378,7 +372,7 @@ class windODE:
 
     def get_velocity(self, t, x):
 
-        counter = self.__GetClosestTimeStepIndex(t)
+        counter = self.__get_closest_time_step_index(t)
         plt_3d_data = self.sim.data_3d[counter]
 
         mesh = self.sim.meshes[0]
@@ -397,13 +391,13 @@ class windODE:
         return np.array([u_velocity, v_velocity, w_velocity])
 
     def get_index_values(self, x):
-        x_index = (x[0] - self.__meshExtent.x_start) / self.__voxalSize["vx"]
+        x_index = (x[0] - self.__meshExtent.x_start) / self.__voxel_size["vx"]
         if 0 > x_index or x_index > self.__meshBounds.dimension["x"]:
             return np.array([0, 0, 0], dtype=int)
-        y_index = (x[1] - self.__meshExtent.y_start) / self.__voxalSize["vy"]
+        y_index = (x[1] - self.__meshExtent.y_start) / self.__voxel_size["vy"]
         if 0 > y_index or y_index > self.__meshBounds.dimension["y"]:
             return np.array([0, 0, 0], dtype=int)
-        z_index = (x[2] - self.__meshExtent.z_start) / self.__voxalSize["vz"]
+        z_index = (x[2] - self.__meshExtent.z_start) / self.__voxel_size["vz"]
         if 0 > z_index or z_index > self.__meshBounds.dimension["z"]:
             return np.array([0, 0, 0], dtype=int)
         return np.array([x_index, y_index, z_index], dtype=int)
@@ -425,7 +419,7 @@ class windODE:
             )
 
             currentTime = allTimes[i]
-            allRe.append(self.__GetReynoldsNumber(currentPosition, currentTime))
+            allRe.append(self.__get_reynolds_number(currentPosition, currentTime))
 
         oneDataSet["re"] = np.array(allRe)
         return oneDataSet
@@ -463,12 +457,12 @@ class windODE:
         return oneDataSet
 
     def drawPlot(self):
-        for time in self.distanceofWindStreams_index.keys():
-            data = self.timeReasults[time]
+        for time in self.distance_of_wind_streams_index.keys():
+            data = self.__time_results[time]
             maxRE = np.max(np.array(self.__REDict[time]))
             fig = plt.figure(figsize=(8, 6))
             ax = fig.add_subplot(1, 1, 1, projection="3d")
-            for i in self.distanceofWindStreams_index[time]:
+            for i in self.distance_of_wind_streams_index[time]:
                 print(data[i]["y"][0][:])
                 x = data[i]["y"][0][:]
                 y = data[i]["y"][1][:]
@@ -481,14 +475,13 @@ class windODE:
             plt.show()
 
     def drawPlot3D(self):
-        for time in self.distanceofWindStreams_index.keys():
-            data = self.timeReasults[time]
+        for time in self.distance_of_wind_streams_index.keys():
+            data = self.__time_results[time]
             maxRE = np.max(np.array(self.__REDict[time]))
             fig = plt.figure(figsize=(8, 6))
             ax = fig.add_subplot(1, 1, 1, projection="3d")
 
-            for i in self.distanceofWindStreams_index[time]:
-                print(data[i]["y"][0][:])
+            for i in self.distance_of_wind_streams_index[time]:
                 x = data[i]["y"][0][:]
                 y = data[i]["y"][1][:]
                 z = data[i]["y"][2][:]
@@ -497,26 +490,20 @@ class windODE:
                 temp = np.max(re) / maxRE
                 ax.plot(x, y, z,  linewidth=1,c=cm.viridis(temp))
 
-
-
-
             for angle in range(0, 360*3):
                 ax.view_init(15, angle)
                 plt.draw()
                 plt.pause(.001)
 
-
-
-
-    def __GetClosestTimeStepIndex(self, t):
-        closest_timeStep_value = min(self.__timeList, key=lambda x: abs(x - t))
-        closest_timeStep_index = np.where(self.__timeList == closest_timeStep_value)[0][
+    def __get_closest_time_step_index(self, t):
+        closest_time_step_value = min(self.__timeList, key=lambda x: abs(x - t))
+        closest_time_step_index = np.where(self.__timeList == closest_time_step_value)[0][
             0
         ]
-        return int(closest_timeStep_index)
+        return int(closest_time_step_index)
 
-    def __GetReynoldsMatrix(self, t):
-        time_step_index = self.__GetClosestTimeStepIndex(t)
+    def __get_reynolds_matrix(self, t):
+        time_step_index = self.__get_closest_time_step_index(t)
         plt_3d_data = self.sim.data_3d[time_step_index]
 
         mesh = self.sim.meshes[0]
@@ -531,363 +518,293 @@ class windODE:
 
         return re_data
 
-    def __GetReynoldsNumber(self, x, t):
-        re_data = self.__GetReynoldsMatrix(t)
+    def __get_reynolds_number(self, x, t):
+        re_data = self.__get_reynolds_matrix(t)
         if len(re_data) == 0:
-            return
+            return None
 
         index_values = self.get_index_values(x)
-        re_value = re_data[index_values[0], index_values[1], index_values[2]]
+        re_value = re_data[index_values[0]][ index_values[1]][ index_values[2]]
 
         return re_value
 
-    def EvaluateReynoldsValues(self):
-        values = defaultdict(lambda: 0)
-        for t in self.__timeList[3:10]:
-            current_Re_values = self.__GetReynoldsMatrix(t)
-            flatten_values = flatten_values_sorted = np.array(
-                current_Re_values, dtype=np.float64
-            ).flatten()
-            flatten_values_sorted = list(np.sort(flatten_values_sorted))
-            Re_percentile_min = np.percentile(flatten_values, 86.5)
-            ranking = {}
-            for i in range(len(flatten_values_sorted)):
-                ranking[flatten_values[i]] = i
+    def get_data_from_time(self, t):
+        """
 
-            for i in range(current_Re_values.shape[0]):
-                for j in range(current_Re_values.shape[1]):
-                    for k in range(current_Re_values.shape[2]):
-                        if current_Re_values[i, j, k] >= Re_percentile_min:
-                            values[f"{i},{j},{k}"] += current_Re_values[i, j, k]
-
-        print(np.max(list(values.values())))
-        fig = plt.figure(figsize=(10, 7))
-        ax = plt.axes(projection="3d")
-        max_value = np.percentile(list(values.values()), 70)
-        x = []
-        y = []
-        z = []
-        c = []
-        for key in list(values.keys()):
-            if values[key] < max_value:
-                continue
-            x_k, y_k, z_k = key.split(",")
-            x.append(int(x_k))
-            y.append(int(y_k))
-            z.append(int(z_k))
-            value = float(values[key])
-            c.append(value)
-
-        # Creating color map
-        my_cmap = plt.get_cmap("viridis")
-
-        scatter_plot = ax.scatter3D(x, y, z, c=c, cmap=my_cmap)
-
-        plt.colorbar(scatter_plot)
-
-        plt.show()
-
-        highest_re_Points = []
-        c_sorted = sorted(c)
-        for i in range(len(c)):
-            highest_re_Points.append(c.index(c_sorted[i]))
-
-        fig = plt.figure(figsize=(10, 7))
-        ax = plt.axes(projection="3d")
-        x_1 = []
-        y_1 = []
-        z_1 = []
-        c_1 = []
-        for key in highest_re_Points[self.__numberOfStreakLines * -1 :]:
-            x_1.append(x[key])
-            y_1.append(y[key])
-            z_1.append(z[key])
-            value = float(c[key])
-            c_1.append(value)
-
-        # Creating color map
-        my_cmap = plt.get_cmap("viridis")
-        scatter_plot = ax.scatter3D(x_1, y_1, z_1, c=c_1, cmap=my_cmap)
-        plt.colorbar(scatter_plot)
-        plt.show()
-
-        points_of_interest_index = [[x_1[i], y_1[i], z_1[i]] for i in range(len(x_1))]
-        points_of_interest_position = [
-            self.getPositionFromIndex([x_1[i], y_1[i], z_1[i]]) for i in range(len(x_1))
-        ]
-        for i in range(len(points_of_interest_position)):
-            print(points_of_interest_index[i], points_of_interest_position[i])
-
-        self.startingpoints.extend(points_of_interest_position)
-
-    def getDataFromTime(self, t):
-        if t in self.timeReasults.keys():
-            return self.timeReasults[t]
+        :param t:
+        :return:
+        """
+        if t in self.__time_results:
+            return self.__time_results[t]
         return []
 
-    def getMaxRE(self):
+    def get_max_re(self):
+        """
+        returns max RE Value
+        :return:
+        """
         return self.__maxRe
 
-    def getReynoldsMatrix(self, t):
-        return self.__GetReynoldsMatrix(t)
-
-    def getTimeList(self):
-        return self.__timeList
-
-    def getAverageREOverTime(self, t_range):
-        allTimelist = self.getTimeList()
-        filteredTimeLists = None
+    def get_average_re_over_time(self, t_range):
+        """
+        Averages the reynolds number value over a range o times
+        :param t_range: range o start and end time frame
+        :return: ixjxk array
+        """
+        all_time_list = self.__timeList
+        filtered_time_lists = None
         for t_start, t_end in t_range:
-            filteredTimeList = allTimelist[allTimelist >= t_start]
-            filteredTimeList = filteredTimeList[filteredTimeList <= t_end]
-            if filteredTimeLists is None:
-                filteredTimeLists = filteredTimeList
+            filtered_time_list = all_time_list[all_time_list >= t_start]
+            filtered_time_list = filtered_time_list[filtered_time_list <= t_end]
+            if filtered_time_lists is None:
+                filtered_time_lists = filtered_time_list
             else:
-                filteredTimeLists = np.append(
-                    filteredTimeLists, filteredTimeList, axis=0
+                filtered_time_lists = np.append(
+                    filtered_time_lists, filtered_time_list, axis=0
                 )
 
-        reAverageMatrix = self.getReynoldsMatrix(filteredTimeList[0])
-        for i in range(1, len(filteredTimeList)):
-            reAverageMatrix = reAverageMatrix + self.getReynoldsMatrix(
-                filteredTimeList[i]
+        re_average_matrix = self.__get_reynolds_matrix(filtered_time_list[0])
+        for i in range(1, len(filtered_time_list)):
+            re_average_matrix = re_average_matrix + self.__get_reynolds_matrix(
+                filtered_time_list[i]
             )
-        reAverageMatrix = reAverageMatrix / len(filteredTimeList)
-        return np.array(reAverageMatrix)
+        re_average_matrix = re_average_matrix / len(filtered_time_list)
+        return np.array(re_average_matrix)
 
-    def getMeanPeaksandSTD(self, reMatrix, n_bins):
-        dataFlatten = reMatrix.flatten()
-        dataNoZero = dataFlatten[dataFlatten > 0.0]
+    def get_mean_std(self, re_matrix):
+        """
+        
+        :param re_matrix: 
+        :return: 
+        """
+        data_flatten = re_matrix.flatten()
+        data_no_zero = data_flatten[data_flatten > 0.0]
 
         # dataNoZero -= np.min(dataNoZero)
-        print(f"Min non Zero Value {np.min(dataNoZero)}")
-        dataMean = np.mean(dataNoZero)
-        dataStd = np.std(dataNoZero)
-        dataSig2 = dataMean + 2.0 * dataStd
-        dataSigNeg3 = dataMean - 3.0 * dataStd
+        print(f"Min non Zero Value {np.min(data_no_zero)}")
 
-        ratio =1
-        dataNoZero *= ratio
-        dataMean = np.mean(dataNoZero)
-        dataStd = np.std(dataNoZero)
-        dataSig2 = dataMean + 2.0 * dataStd
+        data_mean = np.mean(data_no_zero)
+        data_std = np.std(data_no_zero)
 
-        dataSigNeg3 = dataMean - 3.0 * dataStd
 
-        print(f"Standard Dev {dataStd} Mean {dataMean}  2-sigma {dataSig2}")
-        if plot_Flag:
+        print(f"Standard Dev {data_std} Mean {data_mean}  2-sigma {data_mean + 2.0*data_std}")
+        if PLOT_FLAG:
             fig, ax = plt.subplots(figsize=(12, 6))
 
             # plt.title(f"{n_bins} Bins without Zero Values")
-            plt.xlim([0, np.max(dataNoZero)])
+            plt.xlim([0, np.max(data_no_zero)])
 
-            n, bins, patches = plt.hist(dataNoZero, bins=n_bins)
+            n_ranges, bins, patches = plt.hist(data_no_zero, bins=self.__n_bins)
 
-            peaks, _ = find_peaks(n, distance=15)
-            print(bins[peaks])
-            print(peaks)
+
             plt.axvline(
-                dataMean, color="k", linestyle="dashed", linewidth=1, label="Mean"
+                data_mean, color="k", linestyle="dashed", linewidth=1, label="Mean"
             )
             plt.axvline(
-                dataSig2, color="r", linestyle="dashed", linewidth=1, label="2 Sigma"
+                data_mean + 2.0*data_std, color="r", linestyle="dashed", linewidth=1, label="2 Sigma"
             )
             plt.axvline(
-                dataSigNeg3,
+                data_mean -3.0* data_std,
                 color="r",
                 linestyle="dashed",
                 linewidth=1,
                 label="Negative 3 Sigma",
             )
-            min_ylim, max_ylim = plt.ylim()
-            plt.text(dataMean * 1.05, max_ylim * 0.96, "Mean: {:.2f}".format(dataMean))
+            max_ylim = plt.ylim()[1]
+            plt.text(data_mean * 1.05, max_ylim * 0.96, f"Mean: {data_mean:.2f}")
 
             plt.xlabel("Reynolds Value")
             plt.ylabel("Voxal Count")
             plt.text(
-                (dataSigNeg3) * 1.05,
+                (data_mean -3.0* data_std) * 1.05,
                 max_ylim * 0.9,
-                "-3 Sigma: {:.2f}".format(dataSigNeg3),
+                f"-3 Sigma: {data_mean - 3.0* data_std:.2f}",
             )
             plt.text(
-                (dataSig2) * 1.05, max_ylim * 0.9, "2 Sigma: {:.2f}".format(dataSig2)
+                (data_mean +2.0* data_std) * 1.05, max_ylim * 0.9, f"2 Sigma: {data_mean +2.0* data_std:.2f}"
             )
             ax.legend()
 
 
             for patch_i in range(len(patches)):
                 patches[patch_i].set_fc("grey")
-                if bins[patch_i] >= dataSig2 or bins[patch_i] <= dataSigNeg3:
+                if bins[patch_i] >= data_mean +2.0* data_std or bins[patch_i] <= data_mean -3.0* data_std:
                     patches[patch_i].set_fc("red")
             plt.show()
         else:
 
-            n, bins = np.histogram(dataNoZero, bins=n_bins)
-        returnDict = {'n': n,
-                  'bins': bins,
-                  'mean': dataMean,
-                  'std': dataStd,
-                  'sigmaOne': dataMean+dataStd ,
-                  'sigmaTwo': dataSig2,
-                  'sigmaNegThree': dataSigNeg3,
-                  'sigmaNegTwo': dataSigNeg3+dataStd,
-                  'sigmaNegOne': dataMean-dataStd,
-                  'None':None,
-                  'zero':0}
-        return returnDict,ratio
+            n_ranges, bins = np.histogram(data_no_zero, bins=self.__n_bins)
+        return_dict = {'n_ranges': n_ranges,
+                       'bins': bins,
+                       'mean': data_mean,
+                       'std': data_std,
+                       'sigmaOne': data_mean + data_std,
+                       'sigmaTwo': data_mean + 2.0 *data_std,
+                       'sigmaNegThree': data_mean - 3.0 *data_std,
+                       'sigmaNegTwo': data_mean - 2.0 * data_std,
+                       'sigmaNegOne': data_mean - data_std,
+                       'None': None,
+                       'zero': 0}
+        return return_dict
 
-    def plotPointsInRERange(self, testData, plotRange, plotInfo):
-
-        print(testData.shape)
-        if isinstance(plotRange[0], str):
-          plotRange[0]=plotInfo[plotRange[0]]
-        if isinstance(plotRange[1], str):
-          plotRange[1]=plotInfo[plotRange[1]]
-        print(f"Points between {plotRange[0]} and {plotRange[1]}")
+    def __plot_points_RE_range(self, test_data, plot_range, plot_info):
+        if isinstance(plot_range[0], str):
+          plot_range[0]=plot_info[plot_range[0]]
+        if isinstance(plot_range[1], str):
+          plot_range[1]=plot_info[plot_range[1]]
+        print(f"Points between {plot_range[0]} and {plot_range[1]}")
         x_1 = []
         y_1 = []
         z_1 = []
         c_1 = []
-        for x_i in range(testData.shape[0]):
-            for y_i in range(testData.shape[1]):
-                for z_i in range(testData.shape[2]):
-                    if plotRange[0] < testData[x_i, y_i, z_i]:
+        for x_i in range(test_data.shape[0]):
+            for y_i in range(test_data.shape[1]):
+                for z_i in range(test_data.shape[2]):
+                    if plot_range[0] < test_data[x_i, y_i, z_i]:
                         if (
-                            plotRange[1] is None
-                            or testData[x_i, y_i, z_i] <= plotRange[1]
+                            plot_range[1] is None
+                            or test_data[x_i, y_i, z_i] <= plot_range[1]
                         ):
                             x_1.append(x_i)
                             y_1.append(y_i)
                             z_1.append(z_i)
-                            c_1.append(testData[x_i, y_i, z_i])
-        indexValues = [x_1, y_1, z_1, c_1]
-        positionValues =                np.array([ app.getPositionFromIndex(
-                    [indexValues[0][i], indexValues[1][i], indexValues[2][i]]
+                            c_1.append(test_data[x_i, y_i, z_i])
+        index_values = [x_1, y_1, z_1, c_1]
+        position_values =                np.array([ self.get_position_from_index(
+                    [index_values[0][i], index_values[1][i], index_values[2][i]]
                 )
-                for i in range(len(indexValues[0]))
+                for i in range(len(index_values[0]))
             ])
-        if plot_Flag:
-            fig = plt.figure(figsize=(10, 7))
-            ax = plt.axes(projection="3d")
+        if PLOT_FLAG:
+            plt.figure(figsize=(10, 7))
+            ax_1 = plt.axes(projection="3d")
 
             # Creating color map
-            my_cmap = plt.get_cmap("viridis")
-            scatter_plot = ax.scatter3D(positionValues.T[0],positionValues.T[1],positionValues.T[2], c=c_1, cmap=my_cmap)
-            ax.set_zlim(self.__meshExtent.z_start,self.__meshExtent.z_end )
-            ax.set_ylim(self.__meshExtent.y_start,self.__meshExtent.y_end)
-            ax.set_xlim(self.__meshExtent.x_start,self.__meshExtent.x_end)
+            # my_cmap = plt.get_cmap("viridis")
+            scatter_plot = ax_1.scatter3D(position_values.T[0],position_values.T[1],position_values.T[2], c=c_1, cmap= plt.get_cmap("viridis"))
+            ax_1.set_zlim(self.__meshExtent.z_start,self.__meshExtent.z_end )
+            ax_1.set_ylim(self.__meshExtent.y_start,self.__meshExtent.y_end)
+            ax_1.set_xlim(self.__meshExtent.x_start,self.__meshExtent.x_end)
             plt.colorbar(scatter_plot)
             plt.show()
         print(f"There are this many Points {len(x_1)}")
 
         return np.array(
-            positionValues
-        ), np.array([indexValues[3][i] for i in range(len(indexValues[0]))])
+            position_values
+        ), np.array([index_values[3][i] for i in range(len(index_values[0]))])
 
-    def getStartingPositions(self, flowPostions, k_num, weighted):
-        Z = pd.DataFrame(np.array(flowPostions))
-        KMean = KMeans(n_clusters=k_num)
-        KMean.fit(Z, sample_weight=weighted)
-        label = KMean.predict(Z)
-        closest, _ = pairwise_distances_argmin_min(KMean.cluster_centers_, Z)
-        print(f"Silhouette Score(n={k_num}): {silhouette_score(Z, label)}")
-        if plot_Flag:
+    def get_starting_positions(self, position_values, k_num, weighted):
+        """
+
+        :param position_values:
+        :param k_num:
+        :param weighted:
+        :return:
+        """
+        position_df = pd.DataFrame(position_values)
+        k_mean = KMeans(n_clusters=k_num)
+        k_mean.fit(position_df, sample_weight=weighted)
+        label = k_mean.predict(position_df)
+        closest, _ = pairwise_distances_argmin_min(k_mean.cluster_centers_, position_df)
+        print(f"Silhouette Score(n={k_num}): {silhouette_score(position_df, label)}")
+        if PLOT_FLAG:
             fig = plt.figure(figsize=(8, 6))
-            ax = fig.add_subplot(1, 1, 1, projection="3d")
-
+            ax_1 = fig.add_subplot(1, 1, 1, projection="3d")
+            ax_1.set_zlim(self.__meshExtent.z_start,self.__meshExtent.z_end )
+            ax_1.set_ylim(self.__meshExtent.y_start,self.__meshExtent.y_end)
+            ax_1.set_xlim(self.__meshExtent.x_start,self.__meshExtent.x_end)
             my_cmap = plt.get_cmap("viridis")
-            scatter_plot = ax.scatter(
-                flowPostions.T[0],
-                flowPostions.T[1],
-                flowPostions.T[2],
+            ax_1.scatter(
+                position_values.T[0],
+                position_values.T[1],
+                position_values.T[2],
                 c=label,
                 cmap=my_cmap,
             )
 
             plt.legend()
             plt.show()
-        print(label)
         return np.array(
             [
-                [flowPostions.T[0][c], flowPostions.T[1][c], flowPostions.T[2][c]]
+                [position_values.T[0][c], position_values.T[1][c], position_values.T[2][c]]
                 for c in closest
             ]
         )
 
-    def getAllStartingPoints(self, t_range, n_bins, re_min, re_max, k_means):
-        all_flowIndex = None
-        all_weights = None
-        testData = self.getAverageREOverTime(t_range)
+    def get_all_starting_points(self, t_range, re_range, k_means):
+        """
 
-        plotInfo, ratio = self.getMeanPeaksandSTD(testData, n_bins)
-        testData *= ratio
-        flowIndex, weight = self.plotPointsInRERange(
-            testData, [re_min, re_max], plotInfo
+        :param t_range: range of time used to computing average
+        :param re_range: range of reynolds numbers
+        :param k_means: number of clusters used in k means
+        :return: list of all starting points
+        """
+        average_data_over_range = self.get_average_re_over_time(t_range)
+        average_data_over_range *= self.__ratio
+        plot_info = self.get_mean_std(average_data_over_range)
+
+        position_values, weight = self.__plot_points_RE_range(
+            average_data_over_range, re_range, plot_info
         )
-        if all_flowIndex is None:
-            all_flowIndex = flowIndex
-            all_weights = weight
-        else:
-            all_flowIndex = np.append(all_flowIndex, flowIndex, axis=0)
-            all_weights = np.append(all_weights, weight, axis=0)
-
-
-        startingPositions = self.getStartingPositions(
-            all_flowIndex, k_means, weighted=all_weights
+        starting_positions = self.get_starting_positions(
+            position_values, k_means, weighted=weight
         )
 
 
-        return startingPositions
+        return starting_positions
 
 
-plot_Flag = False
+PLOT_FLAG = True
 
 #%%
-fds_loc = "/home/trent/Trunk/Trunk/Trunk.fds"
-dir = "/home/trent/Trunk/TimeDelay"
-# fds_loc = "/home/kl3pt0/Trunk/Trunk/Trunk.fds"
-# dir = "/home/kl3pt0/Trunk/Fire"
+def main():
+    fds_loc = "/home/trent/Trunk/Trunk/Trunk.fds"
+    fds_dir = "/home/trent/Trunk/TimeDelay"
+    fds_loc = "/home/kl3pt0/Trunk/Trunk/Trunk.fds"
+    fds_dir = "/home/kl3pt0/Trunk/Fire"
 
-fds_loc = "E:\Trunk\Trunk\Trunk\Trunk.fds"
+    # fds_loc = "E:\Trunk\Trunk\Trunk\Trunk.fds"
+    #
+    # fds_dir = "E:\Trunk\Trunk\\SableWindRE\\"
 
-dir = "E:\Trunk\Trunk\\SableWindRE\\"
+    t_span = [0, 100]
+    start_time = time.perf_counter()
+    app = windODE(fds_dir, fds_loc, t_span, )
+    # app.EvaluateReynoldsValues()
 
-t_span = [0, 22]
-start_time = time.perf_counter()
-app = windODE(dir, fds_loc, t_span, )
-# app.EvaluateReynoldsValues()
+    time_sets = [[0, 20]]
+    re_ranges_and_k_means = [ [0,"sigmaNegTwo", 24],["sigmaTwo","None",76]]
 
-nBins = 800
-timeSets = [[0, 20]]
-re_ranges_and_k_means = [ [0,"sigmaNegTwo", 12],["sigmaTwo","None",38]]
+    all_starting_points = None
+    for re_min, re_max, k_means in re_ranges_and_k_means:
+        starting_postions = app.get_all_starting_points(
+            time_sets,  [re_min, re_max], k_means
+        )
 
-all_starting_points = None
-for re_min, re_max, k_means in re_ranges_and_k_means:
-    startingPostions = app.getAllStartingPoints(
-        timeSets, nBins, re_min, re_max, k_means
-    )
+        if all_starting_points is None:
+            all_starting_points = starting_postions
+            continue
+        all_starting_points = np.append(all_starting_points, starting_postions, axis=0)
 
-    if all_starting_points is None:
-        all_starting_points = startingPostions
-        continue
-    all_starting_points = np.append(all_starting_points, startingPostions, axis=0)
-
-app.startingpoints = all_starting_points
-
-
-# for i in range(3,21,2):
-#     app.startingPointsRibbon([0,0,i],[20,0,i],10)
-#     app.startingPointsRibbon([0,0,i],[0,20,i],10)
-# app.startingpoints = [[np.random.rand()*20, 0, np.random.rand()*17.5+2.5] for i in range(50)]
-# app.startingpoints = np.append(app.startingpoints,[[ 0,np.random.rand()*20, np.random.rand()*17.5+2.5] for i in range(50)],axis=0)
+    app.starting_points = all_starting_points
 
 
-# app.getStartingPoints()
-app.StartODE(reverse_integration=True)
-
-app.filterOutStreamsByLength()
-# app.drawPlot3D()
-app.writeH5py("data", "weightedMeans")
-print()
+    # for i in range(3,21,2):
+    #     app.startingPointsRibbon([0,0,i],[20,0,i],10)
+    #     app.startingPointsRibbon([0,0,i],[0,20,i],10)
+    # app.startingpoints = [[np.random.rand()*20, 0, np.random.rand()*17.5+2.5] for i in range(50)]
+    # app.startingpoints = np.append(app.startingpoints,[[ 0,np.random.rand()*20, np.random.rand()*17.5+2.5] for i in range(50)],axis=0)
 
 
+    # app.getStartingPoints()
+    app.StartODE(reverse_integration=True)
+
+    app.filter_streams_by_length()
+    # app.drawPlot3D()
+    app.writeH5py("data", "weightedMeans")
+    print(time.process_time()-start_time)
+
+
+
+if __name__ == '__main__':
+    main()
