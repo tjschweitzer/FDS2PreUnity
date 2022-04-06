@@ -663,10 +663,8 @@ class windODE:
         print(f"Min non Zero Value {np.min(dataNoZero)}")
         dataMean = np.mean(dataNoZero)
         dataStd = np.std(dataNoZero)
-        dataSig2 = dataMean + 2.0 * dataStd
-        dataSigNeg3 = dataMean - 3.0 * dataStd
 
-        ratio =1
+        ratio =.15
         dataNoZero *= ratio
         dataMean = np.mean(dataNoZero)
         dataStd = np.std(dataNoZero)
@@ -683,42 +681,34 @@ class windODE:
 
             n, bins, patches = plt.hist(dataNoZero, bins=n_bins)
 
-            peaks, _ = find_peaks(n, distance=15)
-            print(bins[peaks])
-            print(peaks)
+
             plt.axvline(
                 dataMean, color="k", linestyle="dashed", linewidth=1, label="Mean"
             )
             plt.axvline(
-                dataSig2, color="r", linestyle="dashed", linewidth=1, label="2 Sigma"
+                150, color="r", linestyle="dashed", linewidth=1, label="Turbulent Flow"
             )
             plt.axvline(
-                dataSigNeg3,
-                color="r",
+                40,
+                color="g",
                 linestyle="dashed",
                 linewidth=1,
-                label="Negative 3 Sigma",
+                label="Laminar Flow",
             )
             min_ylim, max_ylim = plt.ylim()
-            plt.text(dataMean * 1.05, max_ylim * 0.96, "Mean: {:.2f}".format(dataMean))
 
             plt.xlabel("Reynolds Value")
             plt.ylabel("Voxal Count")
-            plt.text(
-                (dataSigNeg3) * 1.05,
-                max_ylim * 0.9,
-                "-3 Sigma: {:.2f}".format(dataSigNeg3),
-            )
-            plt.text(
-                (dataSig2) * 1.05, max_ylim * 0.9, "2 Sigma: {:.2f}".format(dataSig2)
-            )
-            ax.legend()
+
+            ax.legend(prop={'size': 16})
 
 
             for patch_i in range(len(patches)):
                 patches[patch_i].set_fc("grey")
-                if bins[patch_i] >= dataSig2 or bins[patch_i] <= dataSigNeg3:
+                if bins[patch_i]>= 150:
                     patches[patch_i].set_fc("red")
+                if bins[patch_i] <= 40:
+                    patches[patch_i].set_fc("green")
             plt.show()
         else:
 
@@ -839,8 +829,11 @@ class windODE:
 
         return startingPositions
 
+tic = time.perf_counter()
 
-plot_Flag = False
+
+
+plot_Flag = True
 
 #%%
 fds_loc = "/home/trent/Trunk/Trunk/Trunk.fds"
@@ -848,18 +841,18 @@ dir = "/home/trent/Trunk/TimeDelay"
 # fds_loc = "/home/kl3pt0/Trunk/Trunk/Trunk.fds"
 # dir = "/home/kl3pt0/Trunk/Fire"
 
-fds_loc = "E:\Trunk\Trunk\Trunk\Trunk.fds"
+fds_loc = "/home/trent/Trunk/TimeDelay/Trunk/Trunk.fds"
 
-dir = "E:\Trunk\Trunk\\SableWindRE\\"
+dir = "/home/trent/Trunk/TimeDelay"
 
-t_span = [0, 22]
+t_span = [0, 100]
 start_time = time.perf_counter()
 app = windODE(dir, fds_loc, t_span, )
 # app.EvaluateReynoldsValues()
 
 nBins = 800
 timeSets = [[0, 20]]
-re_ranges_and_k_means = [ [0,"sigmaNegTwo", 12],["sigmaTwo","None",38]]
+re_ranges_and_k_means = [ [150,"None", 12],["sigmaTwo","None",38]]
 
 all_starting_points = None
 for re_min, re_max, k_means in re_ranges_and_k_means:
@@ -889,5 +882,8 @@ app.filterOutStreamsByLength()
 # app.drawPlot3D()
 app.writeH5py("data", "weightedMeans")
 print()
+toc = time.perf_counter()
+
+print(f"Simulation Ran for {toc - tic:0.4f} seconds")
 
 
