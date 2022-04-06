@@ -66,13 +66,13 @@ class FdsPathLines:
         """
 
         self.__voxel_size["vx"] = (
-                                          self.__mesh_extent.x_end - self.__mesh_extent.x_start
+            self.__mesh_extent.x_end - self.__mesh_extent.x_start
         ) / (self.__mesh_bounds.dimension["x"] - 1)
         self.__voxel_size["vz"] = (
-                                          self.__mesh_extent.z_end - self.__mesh_extent.z_start
+            self.__mesh_extent.z_end - self.__mesh_extent.z_start
         ) / (self.__mesh_bounds.dimension["z"] - 1)
         self.__voxel_size["vy"] = (
-                                          self.__mesh_extent.y_end - self.__mesh_extent.y_start
+            self.__mesh_extent.y_end - self.__mesh_extent.y_start
         ) / (self.__mesh_bounds.dimension["y"] - 1)
         return self
 
@@ -213,7 +213,9 @@ class FdsPathLines:
                 y0,
                 # rtol=1E-4, atol=1E-6,
             )
-            result_with_velocity = self.__add_velocity_to_ode_data_frame(result_solve_ivp)
+            result_with_velocity = self.__add_velocity_to_ode_data_frame(
+                result_solve_ivp
+            )
             current_result_max_vel = np.max(result_with_velocity["velocity"])
             if self.__max_velocity < current_result_max_vel:
                 print(
@@ -227,7 +229,9 @@ class FdsPathLines:
                 current_result_max_re
             )
             if self.__max_re < current_result_max_re:
-                print(f"new max RE {current_result_max_re} changed from {self.__max_re}")
+                print(
+                    f"new max RE {current_result_max_re} changed from {self.__max_re}"
+                )
                 self.__max_re = current_result_max_re
             current_results.append(result_with_re)
         return current_results
@@ -280,8 +284,6 @@ class FdsPathLines:
 
         return return_values
 
-
-
     def write_h5py(self, desired_directory, file_name_prefix):
         file_name = os.path.join(desired_directory, file_name_prefix)
         for re_counter, re_time in enumerate(self.__time_results):
@@ -306,6 +308,7 @@ class FdsPathLines:
                     "length_of_wind_streams",
                     data=np.array(length_of_wind_streams, dtype=np.int64),
                 )
+
                 for i in range(number_of_wind_streams):
                     current_stream = []
                     for j in range(len(data[i]["y"][0])):
@@ -318,10 +321,10 @@ class FdsPathLines:
                                 data[i]["y"][2][j],
                             ]
                         )
-                        f.create_dataset(
-                            f"windStream_{i+1}",
-                            data=np.array(current_stream, dtype=float),
-                        )
+                    f.create_dataset(
+                        f"windStream_{i+1}",
+                        data=np.array(current_stream, dtype=float),
+                    )
 
                 print(f"{file_name}_{int(re_time)}_{time_string}.hdf5", "saved")
 
@@ -381,7 +384,7 @@ class FdsPathLines:
     @staticmethod
     def __add_velocity_to_ode_data_frame(data_set):
         """
-        Adds velocity data set in to data frame        
+        Adds velocity data set in to data frame
         :rtype: object
         :param data_set: initial data frame
         :return: same dataset with added velocity information
@@ -426,7 +429,12 @@ class FdsPathLines:
                 wind_stream_re = data[i]["re"][:]
 
                 # temp = np.max(wind_stream_re) / max_re
-                ax.plot(wind_stream_x, wind_stream_y, wind_stream_z, c=cm.viridis(np.max(wind_stream_re) / max_re))
+                ax.plot(
+                    wind_stream_x,
+                    wind_stream_y,
+                    wind_stream_z,
+                    c=cm.viridis(np.max(wind_stream_re) / max_re),
+                )
             if animation:
                 for angle in range(0, 360 * 3):
                     ax.view_init(15, angle)
@@ -434,8 +442,6 @@ class FdsPathLines:
                     plt.pause(0.001)
             else:
                 plt.show()
-
-
 
     def __get_closest_time_step_index(self, re_time):
         closest_time_step_value = min(self.__time_list, key=lambda x: abs(x - re_time))
@@ -561,7 +567,7 @@ class FdsPathLines:
 
             ax.legend(prop={"size": 16})
 
-            for patch_i,patch in enumerate(patches):
+            for patch_i, patch in enumerate(patches):
                 patch.set_fc("grey")
                 if bins[patch_i] >= 150:
                     patch.set_fc("red")
@@ -705,7 +711,7 @@ class FdsPathLines:
         return starting_positions
 
 
-PLOT_FLAG = True
+PLOT_FLAG = False
 
 #%%
 def main():
