@@ -1,17 +1,18 @@
 # pylint: disable=line-too-long
-import time
-import os
-from collections import defaultdict
-import fdsreader as fds
-from scipy.integrate import solve_ivp
 import h5py
-import pandas as pd
-import numpy as np
-from sklearn.cluster import KMeans
-from sklearn.metrics import silhouette_score
-from sklearn.metrics import pairwise_distances_argmin_min
+import os
+import time
+from collections import defaultdict
+
+import fdsreader as fds
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 from matplotlib import cm
+from sklearn.cluster import KMeans
+from sklearn.metrics import pairwise_distances_argmin_min,silhouette_score
+from scipy.integrate import solve_ivp
+
 
 # %%
 
@@ -23,6 +24,7 @@ class FdsPathLines:
         :param directory: location of the fds output files
         :param fds_input_location: location of the fds input file
 
+        :raises: "fds input must be single mesh" fds simulation must only contain one mesh
 
         :var self.sim:
         :var self.fds_input_location: fds_input_location
@@ -39,30 +41,63 @@ class FdsPathLines:
         self.sim = fds.Simulation(directory)
         self.fds_input_location = fds_input_location
 
-        # self.__directory = directory
-        # self.__qFiles = glob.glob(directory + "*.q")
-        self.__time_list = np.array(self.sim.data_3d.times)
-        self.__t_span = [np.min(self.__time_list), np.min(self.__time_list)]
-        self.__voxel_size = {}
-        self.__max_velocity = 0.0
-        self.__max_re = 0.0
-        self.__re_dict = defaultdict(lambda: [])
-        self.starting_points = []
+        self.__time_list = np.array(
+            self.sim.data_3d.times
+        )  # list of all plot 3-D time steps
+        self.__t_span = [
+            np.min(self.__time_list),
+            np.min(self.__time_list),
+        ]  # minimum and max values of time steps
+
+        if len(self.sim.meshes) != 1:
+            raise Exception("fds input must be single mesh")
+
         self.__mesh_bounds = self.sim.meshes[0]
         self.__mesh_extent = self.sim.meshes[0].extent
+
+        self.__voxel_size = {}
+        self.__set_voxel_size()
+
+        self.__time_results = {}
+        self.__re_dict = defaultdict(lambda: [])
+
+        # configuation values
         self.__n_bins = 800
         self.__ratio = 0.15
-        self.__time_results = {}
-        self.__min_voxel_count = 2.0
-        self.filtered_time_results = {}
 
+        self.__max_velocity = 0.0
+        self.__max_re = 0.0
+        self.__min_voxel_count = 2.0
+        self.total_number_path_lines = (
+            np.cbrt(
+                self.__mesh_bounds.dimension["x"]
+                * self.__mesh_bounds.dimension["y"]
+                * self.__mesh_bounds.dimension["z"]
+            )
+            // 2
+        )
+
+        # list of all starting points to be used in the ODE
+        self.starting_points = []
         self.distance_of_wind_streams_index = defaultdict(lambda: [])
-        self.__set_voxel_size()
+
+
+    @staticmethod
+    def __check_valid_file(path_to_file):
+        """
+         verifies file path is valid
+        :param path_to_file: full path to file
+
+        :raises:"Invalid file path"
+        :return:
+        """
+        if os.path.exists(path_to_file):
+            return
+        raise Exception("Invalid file path")
 
     def __set_voxel_size(self):
         """
-        Calculates voxal size
-        :return:
+        Calculates voxel size
         """
 
         self.__voxel_size["vx"] = (
@@ -74,13 +109,12 @@ class FdsPathLines:
         self.__voxel_size["vy"] = (
             self.__mesh_extent.y_end - self.__mesh_extent.y_start
         ) / (self.__mesh_bounds.dimension["y"] - 1)
-        return self
 
     def get_position_from_index(self, x):
         """
-
-        :param x:
-        :return:
+        converts index values in to 3-d position
+        :param x: list(int) [x,y,z] position
+        :return: 3-d position
         """
         x_index = x[0]
         y_index = x[1]
@@ -90,66 +124,20 @@ class FdsPathLines:
         z_position = self.__mesh_extent.z_start + z_index * self.__voxel_size["vz"]
         return [x_position, y_position, z_position]
 
-    def get_starting_points(self):
+    def __set_minimum_pathline_length(self, voxel_count):
         """
-        Creates a list of points  on the outer most voxals of OBSTS, one point per voxal
-        :var x_min_value center point of minimum x voxal
-        :var x_max_value center point of maximum x voxal
-        :var y_min_value center point of minimum y voxal
-        :var y_max_value center point of maximum y voxal
-
-        :return:
+        :param voxel_count: minimum size in voxels for pathlines
+        :raises  voxel count out of bounds
         """
-        x_min_value = self.__mesh_extent.x_start + self.__voxel_size["vx"] / 2.0
-        x_max_value = self.__mesh_extent.x_end - self.__voxel_size["vx"] / 2.0
-        y_min_value = self.__mesh_extent.y_start + self.__voxel_size["vy"] / 2.0
-        y_max_value = self.__mesh_extent.y_end - self.__voxel_size["vy"] / 2.0
-        with open(self.fds_input_location) as f:
-            lines = f.readlines()
-
-        line_counter = 0
-        while line_counter < len(lines):
-            current_line = lines[line_counter]
-            if current_line == "\n":
-                line_counter += 1
-                continue
-            while "/" not in lines[line_counter]:
-                line_counter += 1
-                current_line = current_line + lines[line_counter]
-
-            line_counter += 1
-            if "&OBST" not in current_line:
-                continue
-            mesh_line = current_line.replace("/", "").replace("\n", "")
-            XB = [float(point) for point in mesh_line.split("XB=")[1].split(",")[:6]]
-
-            if XB[0] <= x_min_value <= XB[1]:
-                self.__add_ribbon_points(
-                    [XB[0], XB[2], XB[5] + self.__voxel_size["vz"]],
-                    [XB[0], XB[3], XB[5] + self.__voxel_size["vz"]],
-                    int((XB[1] - XB[0]) / self.__voxel_size["vx"]),
-                )
-
-            if XB[0] <= x_max_value <= XB[1]:
-                self.__add_ribbon_points(
-                    [XB[1], XB[2], XB[5] + self.__voxel_size["vz"]],
-                    [XB[1], XB[3], XB[5] + self.__voxel_size["vz"]],
-                    int((XB[1] - XB[0]) / self.__voxel_size["vx"]),
-                )
-            if XB[2] <= y_min_value <= XB[3]:
-                self.__add_ribbon_points(
-                    [XB[0], XB[2], XB[5] + self.__voxel_size["vz"]],
-                    [XB[1], XB[2], XB[5] + self.__voxel_size["vz"]],
-                    int((XB[3] - XB[2]) / self.__voxel_size["vy"]),
-                )
-            if XB[2] <= y_max_value <= XB[3]:
-                self.__add_ribbon_points(
-                    [XB[0], XB[3], XB[5] + self.__voxel_size["vz"]],
-                    [XB[1], XB[3], XB[5] + self.__voxel_size["vz"]],
-                    int((XB[3] - XB[2]) / self.__voxel_size["vy"]),
-                )
-
-        return self
+        if 0 >= voxel_count or voxel_count >= np.min(
+            [
+                self.__mesh_bounds.dimension["x"],
+                self.__mesh_bounds.dimension["y"],
+                self.__mesh_bounds.dimension["z"],
+            ]
+        ):
+            raise Exception("voxel count out of bounds")
+        self.__voxel_size = voxel_count
 
     def filter_streams_by_length(self):
         """
@@ -239,9 +227,6 @@ class FdsPathLines:
     def StartODE(self, reverse_integration=True):
 
         for t_start in self.__time_list:
-            if t_start > self.__t_span[1] or t_start < self.__t_span[0]:
-                continue
-
             time_step_index = self.__get_closest_time_step_index(t_start)
 
             all_results = self.run_ode(time_step_index)
@@ -252,7 +237,8 @@ class FdsPathLines:
         self.filter_streams_by_length()
         return self
 
-    def combine_ode_frames(self, all_forward_data, all_backwards_data):
+    @staticmethod
+    def combine_ode_frames(all_forward_data, all_backwards_data):
         return_values = all_backwards_data
         for i in range(len(all_backwards_data)):
             backwards_data = all_backwards_data[i]
@@ -427,8 +413,6 @@ class FdsPathLines:
                 wind_stream_y = data[i]["y"][1][:]
                 wind_stream_z = data[i]["y"][2][:]
                 wind_stream_re = data[i]["re"][:]
-
-                # temp = np.max(wind_stream_re) / max_re
                 ax.plot(
                     wind_stream_x,
                     wind_stream_y,
@@ -710,6 +694,44 @@ class FdsPathLines:
 
         return starting_positions
 
+    def set_turbulent_laminar_poi(self):
+
+        re_ranges_and_k_means = [
+            [0, 40, self.total_number_path_lines * (1 / 3)],
+            [150, "None", self.total_number_path_lines * (2 / 3)],
+        ]
+
+        all_starting_points = None
+        for re_min, re_max, k_means in re_ranges_and_k_means:
+            starting_positions = self.get_all_starting_points(
+                self.__t_span, [re_min, re_max], k_means
+            )
+
+            if all_starting_points is None:
+                all_starting_points = starting_positions
+                continue
+            all_starting_points = np.append(
+                all_starting_points, starting_positions, axis=0
+            )
+
+        self.starting_points = all_starting_points
+
+    def set_random_poi(self):
+        x_range = [self.__mesh_extent.x_start, self.__mesh_extent.x_end]
+        y_range = [self.__mesh_extent.y_start, self.__mesh_extent.y_end]
+        z_range = [self.__mesh_extent.z_start, self.__mesh_extent.z_end]
+        self.startingpoints = [
+            [np.random.rand(), 0, np.random.rand() * 17.5 + 2.5] for _ in range(50)
+        ]
+        self.startingpoints = np.append(
+            self.startingpoints,
+            [
+                [0, np.random.rand() * 20, np.random.rand() * 17.5 + 2.5]
+                for i in range(50)
+            ],
+            axis=0,
+        )
+
 
 PLOT_FLAG = False
 
@@ -726,23 +748,8 @@ def main():
 
     start_time = time.perf_counter()
     app = FdsPathLines(fds_dir, fds_loc)
+    app.set_turbulent_laminar_poi()
     # app.EvaluateReynoldsValues()
-
-    time_sets = [[0, 10]]
-    re_ranges_and_k_means = [[0, 40, 24], [150, "None", 76]]
-
-    all_starting_points = None
-    for re_min, re_max, k_means in re_ranges_and_k_means:
-        starting_postions = app.get_all_starting_points(
-            time_sets, [re_min, re_max], k_means
-        )
-
-        if all_starting_points is None:
-            all_starting_points = starting_postions
-            continue
-        all_starting_points = np.append(all_starting_points, starting_postions, axis=0)
-
-    app.starting_points = all_starting_points
 
     # for i in range(3,21,2):
     #     app.startingPointsRibbon([0,0,i],[20,0,i],10)
