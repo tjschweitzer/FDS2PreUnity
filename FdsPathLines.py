@@ -46,7 +46,7 @@ class FdsPathLines:
         )  # list of all plot 3-D time steps
         self.__t_span = [
             np.min(self.__time_list),
-            np.min(self.__time_list),
+            np.max(self.__time_list),
         ]  # minimum and max values of time steps
 
         if len(self.sim.meshes) != 1:
@@ -68,7 +68,7 @@ class FdsPathLines:
         self.__max_velocity = 0.0
         self.__max_re = 0.0
         self.__min_voxel_count = 2.0
-        self.total_number_path_lines = (
+        self.total_number_path_lines = int(
             np.cbrt(
                 self.__mesh_bounds.dimension["x"]
                 * self.__mesh_bounds.dimension["y"]
@@ -491,15 +491,11 @@ class FdsPathLines:
         """
         all_time_list = self.__time_list
         filtered_time_lists = None
-        for t_start, t_end in t_range:
-            filtered_time_list = all_time_list[all_time_list >= t_start]
-            filtered_time_list = filtered_time_list[filtered_time_list <= t_end]
-            if filtered_time_lists is None:
-                filtered_time_lists = filtered_time_list
-            else:
-                filtered_time_lists = np.append(
-                    filtered_time_lists, filtered_time_list, axis=0
-                )
+        t_start, t_end = t_range
+        filtered_time_list = all_time_list[all_time_list >= t_start]
+        filtered_time_list = filtered_time_list[filtered_time_list <= t_end]
+
+        filtered_time_lists = filtered_time_list
 
         re_average_matrix = self.__get_reynolds_matrix(filtered_time_list[0])
         for i in range(1, len(filtered_time_list)):
@@ -640,11 +636,25 @@ class FdsPathLines:
         :return:
         """
         position_df = pd.DataFrame(position_values)
-        k_mean = KMeans(n_clusters=k_num)
-        k_mean.fit(position_df, sample_weight=weighted)
-        label = k_mean.predict(position_df)
-        closest, _ = pairwise_distances_argmin_min(k_mean.cluster_centers_, position_df)
-        print(f"Silhouette Score(n={k_num}): {silhouette_score(position_df, label)}")
+        values = []
+        counter = []
+        k_num=int(k_num)
+        for i in range(0,k_num,2):
+            k_mean = KMeans(n_clusters=k_num+i)
+            k_mean.fit(position_df, sample_weight=weighted)
+            label = k_mean.predict(position_df)
+            closest, _ = pairwise_distances_argmin_min(k_mean.cluster_centers_, position_df)
+            print(f"Silhouette Score(n={k_num+i}): {silhouette_score(position_df, label)}")
+            values.append(silhouette_score(position_df, label))
+            counter.append(k_num+i)
+        fig = plt.figure(figsize=(8, 6))
+        ax = fig.add_subplot(1, 1, 1,)
+        plt.scatter(counter, values)
+        plt.title("Silhouette scores")
+        plt.xlabel("k_value")
+        plt.ylabel("Score")
+
+        plt.show()
         if PLOT_FLAG:
             fig = plt.figure(figsize=(8, 6))
             ax_1 = fig.add_subplot(1, 1, 1, projection="3d")
@@ -720,18 +730,15 @@ class FdsPathLines:
         x_range = [self.__mesh_extent.x_start, self.__mesh_extent.x_end]
         y_range = [self.__mesh_extent.y_start, self.__mesh_extent.y_end]
         z_range = [self.__mesh_extent.z_start, self.__mesh_extent.z_end]
-        self.startingpoints = [
-            [np.random.rand(), 0, np.random.rand() * 17.5 + 2.5] for _ in range(50)
+        self.starting_points = [
+            [np.random.rand()*(x_range[1]-x_range[0])+x_range[0],
+             np.random.rand()*(y_range[1]-y_range[0])+y_range[0],
+             np.random.rand()*(z_range[1]-z_range[0])+z_range[0]] for _ in range(self.total_number_path_lines)
         ]
-        self.startingpoints = np.append(
-            self.startingpoints,
-            [
-                [0, np.random.rand() * 20, np.random.rand() * 17.5 + 2.5]
-                for i in range(50)
-            ],
-            axis=0,
-        )
 
+    def set_even_distro_poi(self):
+        sqrt_pathline =  np.sqrt( self.total_number_path_lines   )
+        x_ln_spc = np.linspace
 
 PLOT_FLAG = False
 
@@ -749,20 +756,17 @@ def main():
     start_time = time.perf_counter()
     app = FdsPathLines(fds_dir, fds_loc)
     app.set_turbulent_laminar_poi()
-    # app.EvaluateReynoldsValues()
+
 
     # for i in range(3,21,2):
     #     app.startingPointsRibbon([0,0,i],[20,0,i],10)
     #     app.startingPointsRibbon([0,0,i],[0,20,i],10)
-    # app.startingpoints = [[np.random.rand()*20, 0, np.random.rand()*17.5+2.5] for i in range(50)]
-    # app.startingpoints = np.append(app.startingpoints,[[ 0,np.random.rand()*20, np.random.rand()*17.5+2.5] for i in range(50)],axis=0)
 
-    # app.getStartingPoints()
     app.StartODE(reverse_integration=True)
 
     app.filter_streams_by_length()
-    # app.drawPlot3D()
-    app.write_h5py("data", "weightedMeans")
+    app.draw_stream_lines()
+    # app.write_h5py("data", "weightedMeans")
     print(time.process_time() - start_time)
 
 
