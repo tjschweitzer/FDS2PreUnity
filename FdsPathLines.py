@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib import cm
-from sklearn.cluster import KMeans
+from sklearn.cluster import KMeans, OPTICS
 from sklearn.metrics import pairwise_distances_argmin_min,silhouette_score
 from scipy.integrate import solve_ivp
 
@@ -621,6 +621,23 @@ class FdsPathLines:
             ax_1.set_xlim(self.__mesh_extent.x_start, self.__mesh_extent.x_end)
             plt.colorbar(scatter_plot)
             plt.show()
+
+            plt.figure(figsize=(10, 7))
+            ax_1 = plt.axes()
+
+            # Creating color map
+            # my_cmap = plt.get_cmap("viridis")
+            scatter_plot = ax_1.scatter(
+                position_values.T[0],
+                position_values.T[1],
+                c=c_1,
+                cmap=plt.get_cmap("viridis"),
+            )
+            # ax_1.set_zlim(self.__mesh_extent.z_start, self.__mesh_extent.z_end)
+            ax_1.set_ylim(self.__mesh_extent.y_start, self.__mesh_extent.y_end)
+            ax_1.set_xlim(self.__mesh_extent.x_start, self.__mesh_extent.x_end)
+            plt.colorbar(scatter_plot)
+            plt.show()
         print(f"There are this many Points {len(x_1)}")
 
         return np.array(position_values), np.array(
@@ -636,25 +653,11 @@ class FdsPathLines:
         :return:
         """
         position_df = pd.DataFrame(position_values)
-        values = []
-        counter = []
-        k_num=int(k_num)
-        for i in range(0,k_num,2):
-            k_mean = KMeans(n_clusters=k_num+i)
-            k_mean.fit(position_df, sample_weight=weighted)
-            label = k_mean.predict(position_df)
-            closest, _ = pairwise_distances_argmin_min(k_mean.cluster_centers_, position_df)
-            print(f"Silhouette Score(n={k_num+i}): {silhouette_score(position_df, label)}")
-            values.append(silhouette_score(position_df, label))
-            counter.append(k_num+i)
-        fig = plt.figure(figsize=(8, 6))
-        ax = fig.add_subplot(1, 1, 1,)
-        plt.scatter(counter, values)
-        plt.title("Silhouette scores")
-        plt.xlabel("k_value")
-        plt.ylabel("Score")
-
-        plt.show()
+        k_mean = KMeans(n_clusters=k_num)
+        k_mean.fit(position_df, sample_weight=weighted)
+        label = k_mean.predict(position_df)
+        closest, _ = pairwise_distances_argmin_min(k_mean.cluster_centers_, position_df)
+        print(f"Silhouette Score(n={k_num}): {silhouette_score(position_df, label)}")
         if PLOT_FLAG:
             fig = plt.figure(figsize=(8, 6))
             ax_1 = fig.add_subplot(1, 1, 1, projection="3d")
@@ -707,8 +710,8 @@ class FdsPathLines:
     def set_turbulent_laminar_poi(self):
 
         re_ranges_and_k_means = [
-            [0, 40, self.total_number_path_lines * (1 / 3)],
-            [150, "None", self.total_number_path_lines * (2 / 3)],
+            [0, 40, self.total_number_path_lines // 3],
+            [150, "None", self.total_number_path_lines // 3 * 2],
         ]
 
         all_starting_points = None
@@ -737,10 +740,17 @@ class FdsPathLines:
         ]
 
     def set_even_distro_poi(self):
-        sqrt_pathline =  np.sqrt( self.total_number_path_lines   )
-        x_ln_spc = np.linspace
+        x_range = [self.__mesh_extent.x_start, self.__mesh_extent.x_end]
+        y_range = [self.__mesh_extent.y_start, self.__mesh_extent.y_end]
+        z_range = [self.__mesh_extent.z_start, self.__mesh_extent.z_end]
+        sqrt_pathline =  int(np.sqrt( self.total_number_path_lines))
+        x_ln_spc = np.linspace(x_range[0],x_range[1],sqrt_pathline)
+        y_ln_spc = np.linspace(y_range[0],y_range[1],sqrt_pathline)
+        z_ln_spc = np.linspace(z_range[0],z_range[1],sqrt_pathline)
+        points = np.stack((x_ln_spc.flatten(), y_ln_spc.flatten(), [z_range[0]]*sqrt_pathline), axis=1)
+        print()
 
-PLOT_FLAG = False
+PLOT_FLAG = True
 
 #%%
 def main():
@@ -755,6 +765,7 @@ def main():
 
     start_time = time.perf_counter()
     app = FdsPathLines(fds_dir, fds_loc)
+    app.set_even_distro_poi()
     app.set_turbulent_laminar_poi()
 
 
