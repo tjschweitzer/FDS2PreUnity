@@ -10,9 +10,9 @@ import numpy as np
 import pandas as pd
 from matplotlib import cm
 from sklearn.cluster import KMeans, OPTICS
-from sklearn.metrics import pairwise_distances_argmin_min,silhouette_score
+from sklearn.metrics import pairwise_distances_argmin_min, silhouette_score
 from scipy.integrate import solve_ivp
-
+import itertools
 
 # %%
 
@@ -80,7 +80,6 @@ class FdsPathLines:
         # list of all starting points to be used in the ODE
         self.starting_points = []
         self.distance_of_wind_streams_index = defaultdict(lambda: [])
-
 
     @staticmethod
     def __check_valid_file(path_to_file):
@@ -729,26 +728,46 @@ class FdsPathLines:
 
         self.starting_points = all_starting_points
 
-    def set_random_poi(self):
+    def set_random_distro_poi(self):
         x_range = [self.__mesh_extent.x_start, self.__mesh_extent.x_end]
         y_range = [self.__mesh_extent.y_start, self.__mesh_extent.y_end]
         z_range = [self.__mesh_extent.z_start, self.__mesh_extent.z_end]
         self.starting_points = [
-            [np.random.rand()*(x_range[1]-x_range[0])+x_range[0],
-             np.random.rand()*(y_range[1]-y_range[0])+y_range[0],
-             np.random.rand()*(z_range[1]-z_range[0])+z_range[0]] for _ in range(self.total_number_path_lines)
+            [
+                np.random.rand() * (x_range[1] - x_range[0]) + x_range[0],
+                np.random.rand() * (y_range[1] - y_range[0]) + y_range[0],
+                np.random.rand() * (z_range[1] - z_range[0]) + z_range[0],
+            ]
+            for _ in range(self.total_number_path_lines)
         ]
 
     def set_even_distro_poi(self):
+        """
+        Sets an even distribution of points on x and y boundary points
+        :return: None
+        """
         x_range = [self.__mesh_extent.x_start, self.__mesh_extent.x_end]
         y_range = [self.__mesh_extent.y_start, self.__mesh_extent.y_end]
         z_range = [self.__mesh_extent.z_start, self.__mesh_extent.z_end]
-        sqrt_pathline =  int(np.sqrt( self.total_number_path_lines))
-        x_ln_spc = np.linspace(x_range[0],x_range[1],sqrt_pathline)
-        y_ln_spc = np.linspace(y_range[0],y_range[1],sqrt_pathline)
-        z_ln_spc = np.linspace(z_range[0],z_range[1],sqrt_pathline)
-        points = np.stack((x_ln_spc.flatten(), y_ln_spc.flatten(), [z_range[0]]*sqrt_pathline), axis=1)
-        print()
+        sqrt_pathline = int(np.sqrt(self.total_number_path_lines))
+        x_ln_spc = np.linspace(x_range[0], x_range[1], sqrt_pathline)
+        y_ln_spc = np.linspace(y_range[0], y_range[1], sqrt_pathline)
+        z_ln_spc = np.linspace(z_range[0], z_range[1], sqrt_pathline)
+        points_z_min = list(itertools.product(x_ln_spc, y_ln_spc, [z_range[0]]))
+        points_z_max = list(itertools.product(x_ln_spc, y_ln_spc, [z_range[1]]))
+        points_y_min = list(itertools.product(x_ln_spc, [y_range[0]], z_ln_spc))
+        points_y_max = list(itertools.product(x_ln_spc, [y_range[1]], z_ln_spc))
+        points_x_min = list(itertools.product([x_range[0]], y_ln_spc, z_ln_spc))
+        points_x_max = list(itertools.product([x_range[1]], y_ln_spc, z_ln_spc))
+        self.starting_points = (
+            points_z_max
+            + points_z_min
+            + points_y_min
+            + points_y_max
+            + points_x_min
+            + points_x_max
+        )
+
 
 PLOT_FLAG = True
 
@@ -766,12 +785,8 @@ def main():
     start_time = time.perf_counter()
     app = FdsPathLines(fds_dir, fds_loc)
     app.set_even_distro_poi()
+    app.set_random_distro_poi()
     app.set_turbulent_laminar_poi()
-
-
-    # for i in range(3,21,2):
-    #     app.startingPointsRibbon([0,0,i],[20,0,i],10)
-    #     app.startingPointsRibbon([0,0,i],[0,20,i],10)
 
     app.StartODE(reverse_integration=True)
 
