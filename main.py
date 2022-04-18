@@ -1,7 +1,7 @@
 import sys, shutil
 from fds2ComplexGeom import fds2ComplexGeom
 from fdsOutput2Unity import fdsOutputToUnity
-from FdsPathLines import fds_path_lines
+from FdsPathLines import FdsPathLines
 
 import os
 
@@ -41,7 +41,7 @@ def main(args):
     app.runParallel()
 
     # Ordinary Differential Equations for wind vectors
-    fds_path_lines(
+    FdsPathLines(
         fdsOutputDir, fdsInputFile, t_span, starting_points
     ).getVoxalSize().get_starting_points.readInBin().StartODE().write2bin(
         os.path.join(os.path.join(saveLocation, "wind"), "temp")
