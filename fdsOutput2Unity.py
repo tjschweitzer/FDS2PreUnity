@@ -125,6 +125,7 @@ class fdsOutputToUnity:
         myMean = []
         myStdDev = []
         pool = mp.Pool()
+        print("pool made")
         for i, returnValue in enumerate(
             pool.imap(self.getValues, self.filenames.keys())
         ):
@@ -155,6 +156,7 @@ class fdsOutputToUnity:
         print(self.maxValues)
 
     def getValues(self, fileTime):
+        print(fileTime)
         self.fileCounter += 1
         minValue = [np.inf] * self.lenHeaderCountTitles
 
@@ -163,6 +165,7 @@ class fdsOutputToUnity:
         datamean = []
         for file in self.filenames[fileTime]:
             with open(file, "rb") as f:
+                print(f"Opened file {file}")
 
                 header = np.fromfile(f, dtype=np.int32, count=self.lenHeaderCountTitles)
                 _ = np.fromfile(f, dtype=np.float32, count=7)
@@ -433,9 +436,13 @@ def main(args):
     if len(args)!=4:
         print("Usage python fdsOutput2Unity.py {FDS Output Directory} "
               "{FDS Input File Path} {Output Directory} {Output FileType}")
-        quit()
+
     start_time = time.time()
-    app = fdsOutputToUnity(*args)
+    fds_loc = "E:\Trunk\Trunk\Trunk\Trunk.fds"
+    #
+    fds_dir = "E:\Trunk\Trunk\\SableWindRE\\"
+    app = fdsOutputToUnity(fds_output_directory=fds_dir, fds_input_location=fds_loc, save_location="data",saveType="bin")
+
 
     app.findMaxValuesParallel()
     app.runParallel()
