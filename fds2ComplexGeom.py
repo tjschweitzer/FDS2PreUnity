@@ -1,12 +1,14 @@
-import os
 import sys
-from collections import defaultdict
-import numpy as np
 import json
+import os
+from collections import defaultdict
+
+import h5py
+import numpy as np
 
 
 class fds2ComplexGeom:
-    def __init__(self, fds_input_location, tree_id, non_terrainobsts=[]):
+    def __init__(self, fds_input_location, tree_id, non_terrain_obsts=[]):
 
         self.__treeID = tree_id
         self.__fds_input_location = fds_input_location
@@ -15,34 +17,36 @@ class fds2ComplexGeom:
         self.__rowSpacing = 0
         self.__colSpacing = 0
         self.__treeList = []
-        self.__nonTerrainObsts = non_terrainobsts
-        self.readInFDS_Mesh()
-        self.readInTreeLocations()
-        self.readInFDS_OBST()
+        self.topography = defaultdict(lambda: {})
+        self.__nonTerrainObsts = non_terrain_obsts
+        self.read_in_fds_mesh()
+        self.read_in_tree_locations()
+        self.read_in_fds_obst()
         self.complex_geom()
         print()
 
-    def readInFDS_OBST(self):
+    def read_in_fds_obst(self):
         counter = 0
-        self.topography = defaultdict(lambda: {})
         last_key = ""
         with open(self.__fds_input_location) as f:
             lines = f.readlines()
 
-        lineCounter = 0
-        while lineCounter < len(lines):
-            current_line = lines[lineCounter]
-            while "/" not in lines[lineCounter]:
+        line_counter = 0
+        while line_counter < len(lines):
+            current_line = lines[line_counter]
+            while "/" not in lines[line_counter]:
+                line_counter += 1
+                current_line = current_line + lines[line_counter]
+            current_line = current_line.lstrip()
+            line_counter += 1
 
-                lineCounter += 1
-                current_line = current_line + lines[lineCounter]
-            terrainFlag = True
-            for nonTerrainObs in self.__nonTerrainObsts:
-                if nonTerrainObs in current_line:
+            if "&OBST" not in current_line[:5]:
+                continue
+            terrain_flag = [
+                terrain not in current_line for terrain in self.__nonTerrainObsts
+            ]
 
-                    terrainFlag = False
-
-            if "&OBST" in current_line and terrainFlag:
+            if any(terrain_flag):
                 print(current_line)
                 counter += 1
                 XB = [
@@ -58,47 +62,46 @@ class fds2ComplexGeom:
 
                 self.__rowSpacing = abs(XB[0] - XB[1])
 
-            lineCounter += 1
         print(counter, "Terrain object found")
-        self.nrows = len(self.topography[last_key]) - 1
-        self.ncols = len(self.topography) - 1
+        self.n_rows = len(self.topography[last_key]) - 1
+        self.n_cols = len(self.topography) - 1
 
-    def readInTreeLocations(self):
+    def read_in_tree_locations(self):
         with open(self.__fds_input_location) as f:
             lines = f.readlines()
 
-        lineCounter = 0
-        while lineCounter < len(lines):
-            current_line = lines[lineCounter]
-            while "/" not in lines[lineCounter]:
-                lineCounter += 1
-                current_line = current_line + lines[lineCounter]
-                if "&INIT" in current_line and self.__treeID in current_line:
-                    treeLine = current_line.replace("/", "").replace("\n", "")
-                    XYZ_string = treeLine.split("XYZ=")[1].split(",")[:3]
+        line_counter = 0
+        while line_counter < len(lines):
+            current_line = lines[line_counter]
+            while "/" not in lines[line_counter]:
+                line_counter += 1
+                current_line = current_line + lines[line_counter]
+            if "&INIT" in current_line and self.__treeID in current_line:
+                tree_line = current_line.replace("/", "").replace("\n", "")
+                xyz_string = tree_line.split("XYZ=")[1].split(",")[:3]
 
-                    x = float(XYZ_string[0])
+                x = float(xyz_string[0])
 
-                    y = float(XYZ_string[1])
+                y = float(xyz_string[1])
 
-                    z = float(XYZ_string[2])
+                z = float(xyz_string[2])
 
-                    tree_radius = treeLine.split("RADIUS=")[1].split(",")[0]
+                tree_radius = tree_line.split("RADIUS=")[1].split(",")[0]
 
-                    tree_height = treeLine.split("HEIGHT=")[1].split(",")[0]
+                tree_height = tree_line.split("HEIGHT=")[1].split(",")[0]
 
-                    currentTree = {
-                        "x": x,
-                        "y": y,
-                        "crownBaseHeight": z,
-                        "crownRadius": tree_radius,
-                        "crownHeight": tree_height,
-                        "height": z,
-                    }
-                    self.__treeList.append(currentTree)
-            lineCounter += 1
+                current_tree = {
+                    "x": x,
+                    "y": y,
+                    "crownBaseHeight": z,
+                    "crownRadius": tree_radius,
+                    "crownHeight": tree_height,
+                    "height": z,
+                }
+                self.__treeList.append(current_tree)
+            line_counter += 1
 
-    def readInFDS_Mesh(self):
+    def read_in_fds_mesh(self):
         with open(self.__fds_input_location) as f:
             lines = f.readlines()
 
@@ -135,64 +138,93 @@ class fds2ComplexGeom:
                 }
             lineCounter += 1
 
-    def complex_geom(self) -> str:
+    def complex_geom(self) -> None:
         """
-        zMin: min elevation
-        zMax: max elevation
-        total_lat_distance_in_meters : distance of simulation horizontally
-        total_long_distance_in_meters : distance of simulation area vertically
-        right_index_value: right most index value of geotiff
-        top_index_value: top most index value of geotiff
-        left_index_value: left most index value of geotiff
-        bottom_index_value: bottom most index value of geotiff
+        Takes self.topography and builds a 3-D mesh
 
-        Returns:
-            str: complex gemity infomation for fds inputfile
+
+        Orientation of face variables
+                C---A
+                | · |
+                D---B
+
+
+        :var: vertices: Nx3 numpy array of all vertex points
+        :var: vert_counter: keeps track of current vertex index
+        :var: faces: array of all face indexes
+        :var: face_counter: keeps track of current face index (one indexed)
+        :var: col_keys: reverse sorted list of all index points of columns
+        :var: row_keys: reverse sorted list of all index points of current row
+
+        :rtype: None
+        :return:  none
         """
 
-        vertices = np.zeros(((self.nrows + 1) * (self.ncols + 1) * 2, 3))
+        vertices = np.zeros(((self.n_rows + 1) * (self.n_cols + 1) * 2, 3))
+        vert_counter = 0
 
-        vertCounter = 0
+        faces = []
+        face_counter = 1
 
-        offset = (self.nrows + 1) * (self.ncols + 1)
-        colKeys = sorted(self.topography.keys())[::-1]
-        for j in range(self.ncols):
-            rowKeys = sorted(self.topography[colKeys[j]].keys())[::-1]
-            for i in range(self.nrows):
-                x2 = colKeys[j]
-                x1 = colKeys[j] - self.__colSpacing
-                z2 = rowKeys[i]
-                z1 = rowKeys[i] - self.__rowSpacing
+        offset = (self.n_rows + 1) * (self.n_cols + 1)
+        col_keys = sorted(self.topography.keys())[::-1]
+
+        for j in range(self.n_cols):
+
+            row_keys = sorted(self.topography[col_keys[j]].keys())[::-1]
+
+            for i in range(self.n_rows):
+
+                x2 = col_keys[j]
+                x1 = col_keys[j] - self.__colSpacing
+                z2 = row_keys[i]
+                z1 = row_keys[i] - self.__rowSpacing
                 y1 = self.__meshBounds["Z_MIN"]
-                y2 = self.topography[colKeys[j]][rowKeys[i]]
+                y2 = self.topography[col_keys[j]][row_keys[i]]
 
-                vertices[vertCounter] = [x2, z2, y2]
-                vertices[vertCounter + offset] = [
+                # top topography point
+                vertices[vert_counter] = [x2, z2, y2]
+
+                # bottom topography point
+                vertices[vert_counter + offset] = [
                     x2,
                     z2,
                     y1,
                 ]
-                vertCounter += 1
-                if j == self.ncols - 1:
-                    vertices[vertCounter + self.nrows] = [
+
+                vert_counter += 1
+
+                # checks if on the final column
+                if j == self.n_cols - 1:
+                    # top topography point final column
+                    vertices[vert_counter + self.n_rows] = [
                         x1,
                         z2,
                         y2,
                     ]
-                    vertices[vertCounter + self.nrows + offset] = [x1, z2, y1]
 
-                if i == self.nrows - 1:
-                    vertices[vertCounter] = [x2, z1, y2]
-                    vertices[vertCounter + offset] = [x2, z1, y1]
-                    vertCounter += 1
-                    if j == self.ncols - 1:
-                        vertices[vertCounter + self.nrows] = [x1, z1, y2]
-                        vertices[vertCounter + self.nrows + offset] = [x1, z1, y1]
+                    # bottom topography point final column
+                    vertices[vert_counter + self.n_rows + offset] = [x1, z2, y1]
 
-        vertCounter += self.nrows + 1
+                # checks if on the final row
+                if i == self.n_rows - 1:
 
-        faces = []
-        faceCounter = 1
+                    # top topography point final row
+                    vertices[vert_counter] = [x2, z1, y2]
+
+                    # bottom topography point final row
+                    vertices[vert_counter + offset] = [x2, z1, y1]
+
+                    vert_counter += 1
+
+                    # checks if on the final row and column
+                    if j == self.n_cols - 1:
+                        # top topography point final column and row
+                        vertices[vert_counter + self.n_rows] = [x1, z1, y2]
+
+                        # bottom topography point final column anr row
+                        vertices[vert_counter + self.n_rows + offset] = [x1, z1, y1]
+
         """
         #        C---A
         #        | · |  
@@ -200,22 +232,23 @@ class fds2ComplexGeom:
         """
 
         # Top topography
-        for j in range(self.ncols):
-            for i in range(self.nrows):
-                A = faceCounter
-                B = faceCounter + 1
-                C = faceCounter + self.nrows + 1
-                D = faceCounter + self.nrows + 2
+        for j in range(self.n_cols):
+            for i in range(self.n_rows):
+                A = face_counter
+                B = face_counter + 1
+                C = face_counter + self.n_rows + 1
+                D = face_counter + self.n_rows + 2
 
                 # face 1  A -> B -> C
                 faces.append([A, B, C])
                 # face 2  B -> C -> D
                 faces.append([C, B, D])
-                faceCounter += 1
-            faceCounter += 1
-        print(faceCounter)
+                face_counter += 1
+            face_counter += 1
+
+
         # Right Side
-        for i in range(1, self.nrows + 1):
+        for i in range(1, self.n_rows + 1):
             C = i
             A = i + offset
             D = i + 1
@@ -226,7 +259,7 @@ class fds2ComplexGeom:
             faces.append([C, B, D])
 
         # Left Side
-        for i in range((offset - self.nrows), offset):
+        for i in range((offset - self.n_rows), offset):
             A = i
             B = i + 1
             D = i + offset + 1
@@ -237,82 +270,113 @@ class fds2ComplexGeom:
             faces.append([C, B, D])
 
         # Top Side
-        for i in range(1, self.ncols + 1):
-            A = (self.nrows + 1) * (i) + 1
-            C = (self.nrows + 1) * (i - 1) + 1
-            B = offset + (self.nrows + 1) * (i) + 1
-            D = offset + (self.nrows + 1) * (i - 1) + 1
+        for i in range(1, self.n_cols + 1):
+            A = (self.n_rows + 1) * (i) + 1
+            C = (self.n_rows + 1) * (i - 1) + 1
+            B = offset + (self.n_rows + 1) * (i) + 1
+            D = offset + (self.n_rows + 1) * (i - 1) + 1
             # face 1  A -> B -> C
             faces.append([A, B, C])
             # face 2   C-> B -> D
             faces.append([C, B, D])
 
         # Bottom Side
-        for i in range(1, self.ncols + 1):
-            A = (self.nrows + 1) * (i)
-            B = offset + (self.nrows + 1) * (i)
-            C = (self.nrows + 1) * (i + 1)
-            D = (self.nrows + 1) * (i + 1) + offset
+        for i in range(1, self.n_cols + 1):
+            A = (self.n_rows + 1) * (i)
+            B = offset + (self.n_rows + 1) * (i)
+            C = (self.n_rows + 1) * (i + 1)
+            D = (self.n_rows + 1) * (i + 1) + offset
             # face 1  A -> B -> C
             faces.append([A, B, C])
             # face 2   C-> B -> D
             faces.append([C, B, D])
 
         # Bottom Bottom
-        faceCounter = 1
-        for j in range(self.ncols):
-            for i in range(self.nrows):
-                C = offset + faceCounter
-                A = offset + (self.nrows + 1) + faceCounter
-                B = offset + (self.nrows + 1) + faceCounter + 1
-                D = offset + faceCounter + 1
+        face_counter = 1
+        for j in range(self.n_cols):
+            for i in range(self.n_rows):
+                C = offset + face_counter
+                A = offset + (self.n_rows + 1) + face_counter
+                B = offset + (self.n_rows + 1) + face_counter + 1
+                D = offset + face_counter + 1
 
                 # face 1  A -> B -> C
                 faces.append([A, B, C])
                 # face 2  B -> C -> D
                 faces.append([C, B, D])
-                # print([A, B, C])
-                # face 2  B -> C -> D
-                # print([C, B, D])
-                faceCounter += 1
-            faceCounter += 1
+
+
+                face_counter += 1
+            face_counter += 1
 
         for face_i in range(len(faces)):
             faces[face_i] = [faces[face_i][1], faces[face_i][0], faces[face_i][2]]
-        self.jsonDict = {
+        self.json_dict = {
             "meshData": self.__meshBounds,
             "verts": vertices,
             "faces": faces,
             "treeList": self.__treeList,
         }
 
-    def save2Json(self, filename):
+    def save_to_json(self, filename):
 
-        for key in self.jsonDict:
-            print(key, type(self.jsonDict[key]))
-            if type(self.jsonDict[key]) == np.ndarray:
-                self.jsonDict[key] = self.jsonDict[key].tolist()
+        for key in self.json_dict:
+            print(key, type(self.json_dict[key]))
+            if type(self.json_dict[key]) == np.ndarray:
+                self.json_dict[key] = self.json_dict[key].tolist()
 
         with open(filename, "w") as f:
-            json.dump(self.jsonDict, f)
+            json.dump(self.json_dict, f)
 
+
+    def write_h5py(self,  file_name):
+        with h5py.File(f"{file_name}.hdf5", "w") as f:
+
+            dict_group = f.create_group('meshData')
+            for k, v in self.json_dict["meshData"].items():
+                dict_group[k] = v
+            f.create_dataset(
+                "verts",
+                data=np.array(self.json_dict["verts"], dtype=float),
+            )
+            f.create_dataset(
+                "faces",
+                data=np.array(self.json_dict["faces"], dtype=np.int64),
+            )
+
+            f.create_dataset(
+                "tree_count",
+                data=np.array([len(self.json_dict["treeList"])], dtype=np.int64),
+            )
+            for tree_count in range(len(self.json_dict["treeList"])):
+                dict_group = f.create_group(f"tree_{tree_count}")
+                for k, v in self.json_dict["treeList"][tree_count].items():
+                    dict_group[k] = v
+            print(f"{file_name}.hdf5", "saved")
+
+        return self
 
 def main(args):
     if len(args) == 0:
 
         app = fds2ComplexGeom(
-            "E:\\Trunk\\Trunk\\Trunk\\Trunk.fds", "Generic Foliage", ["Trunk"]
+            "/home/trent/Trunk/Trunk/Trunk.fds", "Generic Foliage", ["Trunk"]
         )
-        app.save2Json("data\\testy.json")
+        # app.save_to_json("data\\testy.json")
+        app.write_h5py("data/testy")
 
         return
-    if len(args) != 2:
-        print("Useage : fds2ComplexGeom {fds Input File} {save Location}")
+    if len(args) < 2:
+        print("Usage : fds2ComplexGeom {fds Input File} {save Location}")
         return
     fds_loc = args[0]
-    save_loc = args[1]
-    app = fds2ComplexGeom(fds_loc)
-    app.save2Json(save_loc)
+    save_loc = args[-1]
+    if len(args) == 3:
+        app = fds2ComplexGeom(fds_loc, args[1])
+    else:
+        app = fds2ComplexGeom(fds_loc, args[1], args[2:-1])
+
+    app.save_to_json(save_loc)
 
 
 if __name__ == "__main__":

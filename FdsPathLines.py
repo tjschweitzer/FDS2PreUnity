@@ -140,7 +140,7 @@ class FdsPathLines:
 
     def filter_streams_by_length(self):
         """
-        This function removes all streamlines that total distance traveled is below a desired length.
+        This function removes all streamlines that total distance traveled is below a desired voxel length.
         :return:
         """
 
@@ -223,7 +223,7 @@ class FdsPathLines:
             current_results.append(result_with_re)
         return current_results
 
-    def StartODE(self, reverse_integration=True):
+    def start_ode(self, reverse_integration=True):
 
         for t_start in self.__time_list:
             time_step_index = self.__get_closest_time_step_index(t_start)
@@ -271,7 +271,7 @@ class FdsPathLines:
 
     def write_h5py(self, desired_directory, file_name_prefix):
         file_name = os.path.join(desired_directory, file_name_prefix)
-        for re_counter, re_time in enumerate(self.__time_results):
+        for _, re_time in enumerate(self.__time_results):
             data = self.__time_results[re_time]
             number_of_wind_streams = len(data)
             length_of_wind_streams = [len(x["y"][0]) for x in data]
@@ -674,6 +674,22 @@ class FdsPathLines:
 
             plt.legend()
             plt.show()
+            plt.figure(figsize=(10, 7))
+            ax_1 = plt.axes()
+
+            # Creating color map
+            # my_cmap = plt.get_cmap("viridis")
+            scatter_plot = ax_1.scatter(
+                position_values.T[0],
+                position_values.T[1],
+                c=label,
+                cmap=plt.get_cmap("viridis"),
+            )
+            # ax_1.set_zlim(self.__mesh_extent.z_start, self.__mesh_extent.z_end)
+            ax_1.set_ylim(self.__mesh_extent.y_start, self.__mesh_extent.y_end)
+            ax_1.set_xlim(self.__mesh_extent.x_start, self.__mesh_extent.x_end)
+
+            plt.show()
         return np.array(
             [
                 [
@@ -709,7 +725,7 @@ class FdsPathLines:
     def set_turbulent_laminar_poi(self):
 
         re_ranges_and_k_means = [
-            [0, 40, self.total_number_path_lines // 3],
+            # [0, 40, self.total_number_path_lines // 3],
             [150, "None", self.total_number_path_lines // 3 * 2],
         ]
 
@@ -727,6 +743,7 @@ class FdsPathLines:
             )
 
         self.starting_points = all_starting_points
+        return self
 
     def set_random_distro_poi(self):
         x_range = [self.__mesh_extent.x_start, self.__mesh_extent.x_end]
@@ -768,7 +785,15 @@ class FdsPathLines:
             + points_x_max
         )
 
+    def compair_mean_median_mode(self,x):
+        data=[]
+        for time in self.__time_list:
+            # print(time)
+            current_re = self.__get_reynolds_number(x,time)*.15
+            data.append(current_re)
+        print(f"Mean {np.mean(data)} Mode {stats.mode(data)} Median {np.median(data)} ")
 
+from scipy import stats
 PLOT_FLAG = True
 
 #%%
@@ -784,16 +809,17 @@ def main():
 
     start_time = time.perf_counter()
     app = FdsPathLines(fds_dir, fds_loc)
-    app.set_even_distro_poi()
-    app.set_random_distro_poi()
-    app.set_turbulent_laminar_poi()
-
-    app.StartODE(reverse_integration=True)
-
-    app.filter_streams_by_length()
-    app.draw_stream_lines()
-    # app.write_h5py("data", "weightedMeans")
-    print(time.process_time() - start_time)
+    # app.set_even_distro_poi()
+    # app.set_random_distro_poi()
+    app.compair_mean_median_mode([10 ,10,2])
+    # app.set_turbulent_laminar_poi()
+    #
+    # app.start_ode(reverse_integration=True)
+    #
+    # app.filter_streams_by_length()
+    # app.draw_stream_lines()
+    # # app.write_h5py("data", "weightedMeans")
+    # print(time.process_time() - start_time)
 
 
 if __name__ == "__main__":
