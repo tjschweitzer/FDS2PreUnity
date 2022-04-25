@@ -24,8 +24,8 @@ def main(args):
         # complexGeom Variables
         tree_id = args[3]  # Label ID for Trees
         non_terrain_obsts = args[
-                            4:
-                            ]  # List of any labels of non terrain non tree objects
+            4:
+        ]  # List of any labels of non terrain non tree objects
 
     # Creating the directories for where all the custom data will be saved
     if not os.path.exists(saveLocation):
