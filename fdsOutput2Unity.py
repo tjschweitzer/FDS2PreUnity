@@ -6,8 +6,6 @@ import glob
 import json
 import multiprocessing as mp
 import fdsreader as fds
-import pyvista as pv
-import h5py
 
 
 class fdsOutputToUnity:
@@ -19,8 +17,8 @@ class fdsOutputToUnity:
         pl_t1 = self.sim.data_3d[-1]
         try:
             self.hrr_idx = pl_t1.get_quantity_index("hrrpuv")
-        except:
-            quit("FDS Simulation requires HRRPUV in plot3d")
+        except StopIteration:
+            raise Exception("FDS Simulation requires HRRPUV in plot3d")
         mesh = self.sim.meshes[0]
         self.__timeList = np.array(self.sim.data_3d.times)
         for t in range(len(self.__timeList)):
@@ -123,7 +121,6 @@ class fdsOutputToUnity:
         self.filenames = self.groupFilesbyTime()
         print(self.filenames)
         myMean = []
-        myStdDev = []
         pool = mp.Pool()
         print("pool made")
         for i, returnValue in enumerate(
@@ -347,7 +344,6 @@ class fdsOutputToUnity:
         newFileName = newFileName.split(".q")[0] + ".bin"
         newFileName = self.save_location + os.path.basename(newFileName)
         headerCountTitles = ["smoke", "U-VELOCITY", "V-VELOCITY", "W-VELOCITY", "fire"]
-        # header {number of eachtype of value to be saved  } 'DENSITY','U-VELOCITY','V-VELOCITY','W-VELOCITY','HRRPUV'
 
         header = np.array(
             [
@@ -393,7 +389,6 @@ class fdsOutputToUnity:
         newFileName = newFileName.split(".q")[0] + ".bin"
         newFileName = self.save_location + os.path.basename(newFileName)
         headerCountTitles = ["smoke", "U-VELOCITY", "V-VELOCITY", "W-VELOCITY", "fire"]
-        # header {number of eachtype of value to be saved  } 'DENSITY','U-VELOCITY','V-VELOCITY','W-VELOCITY','HRRPUV'
 
         header = np.array(
             [
@@ -441,9 +436,9 @@ def main(args):
         )
 
     start_time = time.time()
-    fds_loc = "E:\Trunk\Trunk\Trunk\Trunk.fds"
+    fds_loc = "E:\\Trunk\\Trunk\\Trunk\\Trunk.fds"
     #
-    fds_dir = "E:\Trunk\Trunk\\SableWindRE\\"
+    fds_dir = "E:\\Trunk\\Trunk\\SableWindRE\\"
     app = fdsOutputToUnity(
         fds_output_directory=fds_dir,
         fds_input_location=fds_loc,

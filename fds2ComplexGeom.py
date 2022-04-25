@@ -1,6 +1,5 @@
 import sys
 import json
-import os
 from collections import defaultdict
 
 import h5py
@@ -227,7 +226,7 @@ class fds2ComplexGeom:
 
         """
         #        C---A
-        #        | · |  
+        #        | · |
         #        D---B
         """
 

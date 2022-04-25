@@ -1,4 +1,5 @@
-import sys, shutil
+import shutil
+import sys
 from fds2ComplexGeom import fds2ComplexGeom
 from fdsOutput2Unity import fdsOutputToUnity
 from FdsPathLines import FdsPathLines
@@ -21,10 +22,10 @@ def main(args):
         saveLocation = args[2]  # desired directory for all files to be saved
 
         # complexGeom Variables
-        tree_id = args[3]  #  Label ID for Trees
+        tree_id = args[3]  # Label ID for Trees
         non_terrain_obsts = args[
-            4:
-        ]  # List of any labels of non terrain non tree objects
+                            4:
+                            ]  # List of any labels of non terrain non tree objects
 
     # Creating the directories for where all the custom data will be saved
     if not os.path.exists(saveLocation):

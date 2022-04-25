@@ -1,5 +1,5 @@
-# pylint: disable=line-too-long
 import h5py
+import itertools
 import os
 import time
 from collections import defaultdict
@@ -9,10 +9,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib import cm
-from sklearn.cluster import KMeans, OPTICS
+from sklearn.cluster import KMeans
 from sklearn.metrics import pairwise_distances_argmin_min, silhouette_score
 from scipy.integrate import solve_ivp
-import itertools
+from scipy import stats
 
 # %%
 
@@ -24,7 +24,8 @@ class FdsPathLines:
         :param directory: location of the fds output files
         :param fds_input_location: location of the fds input file
 
-        :raises: "fds input must be single mesh" fds simulation must only contain one mesh
+        :raises: "fds input must be single mesh"
+                 fds simulation must only contain one mesh
 
         :var self.sim:
         :var self.fds_input_location: fds_input_location
@@ -32,7 +33,7 @@ class FdsPathLines:
         :var self.__directory: directory
         :var self.__qFiles: list of all plot 3d output files
         :var self.__timeList: list of all plot 3d time dumps
-        :var self.__voxalSize: resolution of each voxal
+        :var self.__voxelSize: resolution of each voxel
         :var self.__maxVelocity: maximum velocity of any particle in the streamlines
         :var self.startingpoints: list of all starting points to be used in the ODE
 
@@ -61,7 +62,7 @@ class FdsPathLines:
         self.__time_results = {}
         self.__re_dict = defaultdict(lambda: [])
 
-        # configuation values
+        # configuration values
         self.__n_bins = 800
         self.__ratio = 0.15
 
@@ -140,7 +141,8 @@ class FdsPathLines:
 
     def filter_streams_by_length(self):
         """
-        This function removes all streamlines that total distance traveled is below a desired voxel length.
+        This function removes all streamlines that total distance
+        traveled is below a desired voxel length.
         :return:
         """
 
@@ -438,12 +440,14 @@ class FdsPathLines:
         plt_3d_data = self.sim.data_3d[time_step_index]
 
         mesh = self.sim.meshes[0]
+        # dxeta_idx = plt_3d_data.get_quantity_index("dx/eta")
+
         # Select a quantity
         try:
             dxeta_idx = plt_3d_data.get_quantity_index("dx/eta")
-        except:
-            print("dx/eta plot 3d data ot found ")
-            return []
+        except StopIteration:
+            print("dx/eta plot 3d data not found")
+            raise Exception("dx/eta plot 3d data not found")
 
         re_data = plt_3d_data[mesh].data[:, :, :, dxeta_idx]
 
@@ -489,12 +493,9 @@ class FdsPathLines:
         :return: ixjxk array
         """
         all_time_list = self.__time_list
-        filtered_time_lists = None
         t_start, t_end = t_range
         filtered_time_list = all_time_list[all_time_list >= t_start]
         filtered_time_list = filtered_time_list[filtered_time_list <= t_end]
-
-        filtered_time_lists = filtered_time_list
 
         re_average_matrix = self.__get_reynolds_matrix(filtered_time_list[0])
         for i in range(1, len(filtered_time_list)):
@@ -679,16 +680,14 @@ class FdsPathLines:
 
             # Creating color map
             # my_cmap = plt.get_cmap("viridis")
-            scatter_plot = ax_1.scatter(
+            ax_1.scatter(
                 position_values.T[0],
                 position_values.T[1],
                 c=label,
                 cmap=plt.get_cmap("viridis"),
             )
-            # ax_1.set_zlim(self.__mesh_extent.z_start, self.__mesh_extent.z_end)
             ax_1.set_ylim(self.__mesh_extent.y_start, self.__mesh_extent.y_end)
             ax_1.set_xlim(self.__mesh_extent.x_start, self.__mesh_extent.x_end)
-
             plt.show()
         return np.array(
             [
@@ -787,23 +786,20 @@ class FdsPathLines:
 
     def compair_mean_median_mode(self, x):
         data = []
-        for time in self.__time_list:
-            # print(time)
-            current_re = self.__get_reynolds_number(x, time) * 0.15
+        for my_time in self.__time_list:
+            current_re = self.__get_reynolds_number(x, my_time) * 0.15
             data.append(current_re)
         print(f"Mean {np.mean(data)} Mode {stats.mode(data)} Median {np.median(data)} ")
 
 
-from scipy import stats
-
 PLOT_FLAG = True
 
-#%%
+
 def main():
     fds_loc = "/home/trent/Trunk/Trunk/Trunk.fds"
     fds_dir = "/home/trent/Trunk/TimeDelay"
-    # fds_loc = "/home/kl3pt0/Trunk/Trunk/Trunk.fds"
-    # fds_dir = "/home/kl3pt0/Trunk/Fire"
+    fds_loc = "/home/kl3pt0/Trunk/Trunk/Trunk.fds"
+    fds_dir = "/home/kl3pt0/Work/fds3"
 
     # fds_loc = "E:\Trunk\Trunk\Trunk\Trunk.fds"
     #
@@ -822,7 +818,7 @@ def main():
     # app.filter_streams_by_length()
     # app.draw_stream_lines()
     # # app.write_h5py("data", "weightedMeans")
-    # print(time.process_time() - start_time)
+    print(time.process_time() - start_time)
 
 
 if __name__ == "__main__":
