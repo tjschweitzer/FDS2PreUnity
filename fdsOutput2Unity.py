@@ -1,4 +1,5 @@
 import os.path
+import sys
 import time
 import numpy as np
 import glob
@@ -124,6 +125,7 @@ class fdsOutputToUnity:
         myMean = []
         myStdDev = []
         pool = mp.Pool()
+        print("pool made")
         for i, returnValue in enumerate(
             pool.imap(self.getValues, self.filenames.keys())
         ):
@@ -154,6 +156,7 @@ class fdsOutputToUnity:
         print(self.maxValues)
 
     def getValues(self, fileTime):
+        print(fileTime)
         self.fileCounter += 1
         minValue = [np.inf] * self.lenHeaderCountTitles
 
@@ -162,6 +165,7 @@ class fdsOutputToUnity:
         datamean = []
         for file in self.filenames[fileTime]:
             with open(file, "rb") as f:
+                print(f"Opened file {file}")
 
                 header = np.fromfile(f, dtype=np.int32, count=self.lenHeaderCountTitles)
                 _ = np.fromfile(f, dtype=np.float32, count=7)
@@ -427,41 +431,22 @@ class fdsOutputToUnity:
 
 
 # print( data, header[1:-1])
-if __name__ == "__main__":
 
-    # mesh = sim.meshes[0]
-    #
-    # extent = mesh.extent
-    # # Select the last available timestep
-    # t = -1
-    # # Load 3D data for that timestep
-    # pl_t1 = sim.data_3d[t]
-    #
-    # # Create 3D grid
-    # x_ = np.linspace(extent.x_start, extent.x_end, mesh.dimension["x"])
-    # y_ = np.linspace(
-    #     extent.y_start, extent.y_end, mesh.dimension["y"]
-    # )  # y_ = np.array([29])
-    # z_ = np.linspace(extent.z_start, extent.z_end, mesh.dimension["z"])
-    # x, y, z = np.meshgrid(x_, y_, z_, indexing="ij")
-    # points = np.stack((x.flatten(), y.flatten(), z.flatten()), axis=1)
-    #
-    # # Select a quantity
-    # quantity_idx = pl_t1.get_quantity_index("U-VEL")
-    # quantity = pl_t1.quantities[quantity_idx]
-    #
-    # # Get 3D data for a specific quantity in one of the meshes
-    # color_data = pl_t1[mesh].data[:, :, :, quantity_idx]
-    # # It is also possible to just plot a slice
-    # # color_data = pl_t1[mesh].data[:, 29:30, :, quantity_idx]
-    #
-    # # Plot 3D dat
+def main(args):
+    if len(args)!=4:
+        print("Usage python fdsOutput2Unity.py {FDS Output Directory} "
+              "{FDS Input File Path} {Output Directory} {Output FileType}")
 
-    startTime = time.time()
-    app = fdsOutputToUnity(
-        "/home/trent/Trunk/TimeDelay/", "/home/trent/Trunk/Trunk/Trunk.fds", "", "bin"
-    )
+    start_time = time.time()
+    fds_loc = "E:\Trunk\Trunk\Trunk\Trunk.fds"
+    #
+    fds_dir = "E:\Trunk\Trunk\\SableWindRE\\"
+    app = fdsOutputToUnity(fds_output_directory=fds_dir, fds_input_location=fds_loc, save_location="data",saveType="bin")
+
 
     app.findMaxValuesParallel()
     app.runParallel()
-    print(time.time() - startTime)
+    print(time.time() - start_time)
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

@@ -19,8 +19,8 @@ def main(args):
         saveLocation = args[2]  # desired directory for all files to be saved
 
         # complexGeom Variables
-        tree_id = args[3]  # range of start time for wind vectors
-        non_terrain_obsts = args[4:]  # what sides of mesh used
+        tree_id = args[3]  #  Label ID for Trees
+        non_terrain_obsts = args[4:]  # List of any labels of non terrain non tree objects
 
     # Creating the directories for where all the custom data will be saved
     if not os.path.exists(saveLocation):
@@ -39,6 +39,7 @@ def main(args):
     app_geom.save_to_json(os.path.join(os.path.join(saveLocation, "fds"), "topo.json"))
 
     # Ordinary Differential Equations for wind vectors
+
     ode_app = FdsPathLines(fdsOutputDir, fdsInputFile)
     ode_app.set_turbulent_laminar_poi()
     ode_app.start_ode(True)
@@ -50,6 +51,7 @@ def main(args):
     app_hrr = fdsOutputToUnity(fdsOutputDir, fdsInputFile, saveLocation, "bin")
     app_hrr.findMaxValuesParallel()
     app_hrr.runParallel()
+
 
 
 

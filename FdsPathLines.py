@@ -181,7 +181,7 @@ class FdsPathLines:
         self.starting_points.extend(points)
         return self
 
-    def run_ode(self, time_step_index, reverse_integration=False):
+    def run_ode(self, time_step_index, reverse_integration=True):
         t_span = [
             min(self.__time_list[time_step_index:]),
             max(self.__time_list[time_step_index:]),
@@ -809,6 +809,7 @@ def main():
 
     start_time = time.perf_counter()
     app = FdsPathLines(fds_dir, fds_loc)
+
     # app.set_even_distro_poi()
     # app.set_random_distro_poi()
     app.compair_mean_median_mode([10 ,10,2])
@@ -820,6 +821,9 @@ def main():
     # app.draw_stream_lines()
     # # app.write_h5py("data", "weightedMeans")
     # print(time.process_time() - start_time)
+
+
+
 
 
 if __name__ == "__main__":
