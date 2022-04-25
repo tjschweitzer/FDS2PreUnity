@@ -44,9 +44,9 @@ app.write_h5py(hdf5_output_dir, output_fileprefix)
 
 fds2ComplexGeom
 ----------------------
-Reads in FDS  input file and generates infomation for a 3-D mesh visulaized in Unity and a list of all tree locations,  tree stat
+Reads in FDS  input file and generates information for a 3-D mesh visualized in Unity and a list of all tree locations,  tree stat
 s  
-FDS terrain must be in a evenly distributed system
+FDS terrain must be in an evenly distributed system
 
 Command line example
 ```bash
@@ -59,7 +59,7 @@ import fds2ComplexGeom
 fds_input_loc = "/Example/fds/inputfile.fds" # path to FDS output Folder
 output_dir = "/Example/outputdirectoy"
 
-# initalizes the fds data 
+# initializes the fds data 
 app = fds2ComplexGeom(fds_input_loc)
 
 # saves data to JSon File
@@ -82,9 +82,9 @@ import fdsOutput2Unity
 fds_output_dir = "/Example/path" # path to FDS output Folder
 fds_input_loc = "/Example/fds/inputfile.fds" # path to FDS output Folder
 output_dir = "/Example/outputdirectoy"
-output_filetype = "myExableFiles"
+output_filetype = "myExampleFiles"
 
-# initalizes the fds data 
+# initalizes the fds data bl
 
 app = fdsOutput2Unity(
         fds_output_dir,fds_input_loc, output_dir, output_filetype

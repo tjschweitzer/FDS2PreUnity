@@ -785,15 +785,17 @@ class FdsPathLines:
             + points_x_max
         )
 
-    def compair_mean_median_mode(self,x):
-        data=[]
+    def compair_mean_median_mode(self, x):
+        data = []
         for time in self.__time_list:
             # print(time)
-            current_re = self.__get_reynolds_number(x,time)*.15
+            current_re = self.__get_reynolds_number(x, time) * 0.15
             data.append(current_re)
         print(f"Mean {np.mean(data)} Mode {stats.mode(data)} Median {np.median(data)} ")
 
+
 from scipy import stats
+
 PLOT_FLAG = True
 
 #%%
@@ -812,7 +814,7 @@ def main():
 
     # app.set_even_distro_poi()
     # app.set_random_distro_poi()
-    app.compair_mean_median_mode([10 ,10,2])
+    app.compair_mean_median_mode([10, 10, 2])
     # app.set_turbulent_laminar_poi()
     #
     # app.start_ode(reverse_integration=True)
@@ -821,9 +823,6 @@ def main():
     # app.draw_stream_lines()
     # # app.write_h5py("data", "weightedMeans")
     # print(time.process_time() - start_time)
-
-
-
 
 
 if __name__ == "__main__":

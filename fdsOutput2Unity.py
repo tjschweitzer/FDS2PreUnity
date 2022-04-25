@@ -432,21 +432,29 @@ class fdsOutputToUnity:
 
 # print( data, header[1:-1])
 
+
 def main(args):
-    if len(args)!=4:
-        print("Usage python fdsOutput2Unity.py {FDS Output Directory} "
-              "{FDS Input File Path} {Output Directory} {Output FileType}")
+    if len(args) != 4:
+        print(
+            "Usage python fdsOutput2Unity.py {FDS Output Directory} "
+            "{FDS Input File Path} {Output Directory} {Output FileType}"
+        )
 
     start_time = time.time()
     fds_loc = "E:\Trunk\Trunk\Trunk\Trunk.fds"
     #
     fds_dir = "E:\Trunk\Trunk\\SableWindRE\\"
-    app = fdsOutputToUnity(fds_output_directory=fds_dir, fds_input_location=fds_loc, save_location="data",saveType="bin")
-
+    app = fdsOutputToUnity(
+        fds_output_directory=fds_dir,
+        fds_input_location=fds_loc,
+        save_location="data",
+        saveType="bin",
+    )
 
     app.findMaxValuesParallel()
     app.runParallel()
     print(time.time() - start_time)
+
 
 if __name__ == "__main__":
     main(sys.argv[1:])

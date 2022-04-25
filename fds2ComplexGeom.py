@@ -246,7 +246,6 @@ class fds2ComplexGeom:
                 face_counter += 1
             face_counter += 1
 
-
         # Right Side
         for i in range(1, self.n_rows + 1):
             C = i
@@ -305,7 +304,6 @@ class fds2ComplexGeom:
                 # face 2  B -> C -> D
                 faces.append([C, B, D])
 
-
                 face_counter += 1
             face_counter += 1
 
@@ -328,11 +326,10 @@ class fds2ComplexGeom:
         with open(filename, "w") as f:
             json.dump(self.json_dict, f)
 
-
-    def write_h5py(self,  file_name):
+    def write_h5py(self, file_name):
         with h5py.File(f"{file_name}.hdf5", "w") as f:
 
-            dict_group = f.create_group('meshData')
+            dict_group = f.create_group("meshData")
             for k, v in self.json_dict["meshData"].items():
                 dict_group[k] = v
             f.create_dataset(
@@ -355,6 +352,7 @@ class fds2ComplexGeom:
             print(f"{file_name}.hdf5", "saved")
 
         return self
+
 
 def main(args):
     if len(args) == 0:
