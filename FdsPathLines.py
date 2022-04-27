@@ -64,7 +64,7 @@ class FdsPathLines:
 
         # configuration values
         self.__n_bins = 800
-        self.__ratio = 0.15
+        self.__ratio = 0.1
 
         self.__max_velocity = 0.0
         self.__max_re = 0.0
@@ -183,7 +183,7 @@ class FdsPathLines:
         self.starting_points.extend(points)
         return self
 
-    def run_ode(self, time_step_index, reverse_integration=True):
+    def run_ode(self, time_step_index, reverse_integration=False):
         t_span = [
             min(self.__time_list[time_step_index:]),
             max(self.__time_list[time_step_index:]),
@@ -792,7 +792,7 @@ class FdsPathLines:
         print(f"Mean {np.mean(data)} Mode {stats.mode(data)} Median {np.median(data)} ")
 
 
-PLOT_FLAG = True
+PLOT_FLAG = False
 
 
 def main():
@@ -801,23 +801,22 @@ def main():
     fds_loc = "/home/kl3pt0/Trunk/Trunk/Trunk.fds"
     fds_dir = "/home/kl3pt0/Work/fds3"
 
-    # fds_loc = "E:\Trunk\Trunk\Trunk\Trunk.fds"
+    fds_loc =  "E:\\Trails\\fds\\trails.fds"
     #
-    # fds_dir = "E:\Trunk\Trunk\\SableWindRE\\"
+    fds_dir = "E:\\Trails"
 
     start_time = time.perf_counter()
     app = FdsPathLines(fds_dir, fds_loc)
 
     # app.set_even_distro_poi()
     # app.set_random_distro_poi()
-    app.compair_mean_median_mode([10, 10, 2])
-    # app.set_turbulent_laminar_poi()
+    app.set_turbulent_laminar_poi()
     #
-    # app.start_ode(reverse_integration=True)
+    app.start_ode(reverse_integration=True)
     #
     # app.filter_streams_by_length()
     # app.draw_stream_lines()
-    # # app.write_h5py("data", "weightedMeans")
+    app.write_h5py( "E:\\Trails_Save_VR", "weightedMeans")
     print(time.process_time() - start_time)
 
 

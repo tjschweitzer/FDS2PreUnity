@@ -48,7 +48,7 @@ def main(args):
     ode_app.set_turbulent_laminar_poi()
     ode_app.start_ode(True)
     ode_app.filter_streams_by_length()
-    ode_app.draw_stream_lines()
+    # ode_app.draw_stream_lines()
     ode_app.write_h5py(os.path.join(saveLocation, "wind"), "weightedMeans")
 
     # Converts plot3d data to a sparce matrix binary file

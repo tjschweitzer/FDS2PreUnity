@@ -77,8 +77,16 @@ class fds2ComplexGeom:
                 current_line = current_line + lines[line_counter]
             if "&INIT" in current_line and self.__treeID in current_line:
                 tree_line = current_line.replace("/", "").replace("\n", "")
-                xyz_string = tree_line.split("XYZ=")[1].split(",")[:3]
-
+                xyz_string = tree_line.split("XYZ= ")[1].split("=")[0]
+                if "," in xyz_string:
+                    print(f"Comma {xyz_string}")
+                    xyz_string = tree_line.split("XYZ=")[1].split(",")[:3]
+                elif " " in xyz_string:
+                    print(f"Space {xyz_string}")
+                    xyz_string = tree_line.split("XYZ= ")[1].split(' ')[:3]
+                    print(xyz_string)
+                else:
+                    print("None")
                 x = float(xyz_string[0])
 
                 y = float(xyz_string[1])
