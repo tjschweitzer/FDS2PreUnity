@@ -83,7 +83,7 @@ class fds2ComplexGeom:
                     xyz_string = tree_line.split("XYZ=")[1].split(",")[:3]
                 elif " " in xyz_string:
                     print(f"Space {xyz_string}")
-                    xyz_string = tree_line.split("XYZ= ")[1].split(' ')[:3]
+                    xyz_string = tree_line.split("XYZ= ")[1].split(" ")[:3]
                     print(xyz_string)
                 else:
                     print("None")
