@@ -173,7 +173,8 @@ class fdsOutputToUnity:
 
         :param file_time: time value of dump data to look at
 
-        :return: mean values, minimum values, max values in a 3xN array: N is number of types of values dumped
+        :return: mean values, minimum values, max values in an array
+        :raises:array  3xN array: N is number of types of values dumped
         """
         print(file_time)
         self.fileCounter += 1

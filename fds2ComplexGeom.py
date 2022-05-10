@@ -36,7 +36,8 @@ class fds2ComplexGeom:
 
     def read_in_fds_obst(self) -> None:
         """
-        Reads in fds input file and generates a dictionary of dictionary's containing the elevation data for the terrain
+        Reads in fds input file and generates a dictionary of dictionary's
+        containing the elevation data for the terrain
 
         :return: none
         """
@@ -365,7 +366,8 @@ class fds2ComplexGeom:
 
     def write_h5py(self, file_name):
         """
-        Saves all data into a hdf5 file (reading in this type of file in to Unity has not been implemented at this time)
+        Saves all data into a hdf5 file
+        reading in this type of file in to Unity has not been implemented at this time
         :param file_name: full file path and name for file to be saved
         :return:
         """
