@@ -12,6 +12,16 @@ class fdsOutputToUnity:
     def __init__(
         self, fds_output_directory, fds_input_location, save_location, saveType="bin"
     ):
+        """
+        Converts plot3D data from fds into hdf5 data to be loaded into unity
+
+        :param fds_output_directory:  Full path to where fds data was output
+        :param fds_input_location:  Full path to fds input file
+        :param save_location: Full path to where data should be saved one processed
+        :param saveType:
+
+        :raises StopIteration: if hrrpuv is not part of plot3D data dump
+        """
 
         self.sim = fds.Simulation(fds_output_directory)
         pl_t1 = self.sim.data_3d[-1]
@@ -33,7 +43,7 @@ class fdsOutputToUnity:
 
         # self.headerCountTitles = ['smoke', 'U-VELOCITY', 'V-VELOCITY', 'W-VELOCITY', 'fire']
         self.headerCountTitles = []
-        self.readInFDS()
+        self.read_in_fds()
         self.lenHeaderCountTitles = len(self.headerCountTitles)
 
         if len(self.headerCountTitles) == 0:
@@ -41,18 +51,23 @@ class fdsOutputToUnity:
             return
         self.minValues = np.array([np.inf] * self.lenHeaderCountTitles)
         self.maxValues = np.zeros(self.lenHeaderCountTitles)
-        self.save_function = self.write2json if saveType == "json" else self.write2bin
+        self.save_function = (
+            self.write_to_json if saveType == "json" else self.write2bin
+        )
 
-    def readInFDS(self):
+        self.filenames = self.group_files_by_time()
+        self.my_mean = 0.0
+
+    def read_in_fds(self):
         with open(self.fds_input_location) as f:
             lines = f.readlines()
 
-        lineCounter = 0
-        while lineCounter < len(lines):
-            current_line = lines[lineCounter]
-            while "/" not in lines[lineCounter]:
-                lineCounter += 1
-                current_line = current_line + lines[lineCounter]
+        line_counter = 0
+        while line_counter < len(lines):
+            current_line = lines[line_counter]
+            while "/" not in lines[line_counter]:
+                line_counter += 1
+                current_line = current_line + lines[line_counter]
             if "&DUMP" == current_line[:5]:
                 dump_line = (
                     current_line.replace("/", "")
@@ -81,86 +96,93 @@ class fdsOutputToUnity:
 
                 break
 
-            lineCounter += 1
+            line_counter += 1
 
-    def getFileTimeStep(self, file):
+    @staticmethod
+    def get_file_timestep(file) -> float:
         """
         Extracts the timestep from the filename.
 
-        Parameters:
-            file (string): The file name to be processed.
+        :param file: str: The file name to be processed.
 
-        Returns:
-            (Float): Time as a float
+        :rtype: float
+        :return: time value of file
         """
         time_sec = int(file.split("_")[-2])
         time_milsec = int(file.split("_")[-1].split(".q")[0])
         return time_sec + time_milsec / 100.0
 
-    def groupFilesbyTime(self):
+    def group_files_by_time(self):
         """
         Groups filenames by timestamp to allow for multi mesh simulations
 
-        Parameters:
-            None
+        :return:     file_by_time: Dictionary <float,array>
+                    KEY: Time
+                   Value: Array of all files with same timestep
 
-        Returns:
-            fileByTime: Dictionary <float,array>
-                KEY: Time
-                Value: Array of all files with same timestep
         """
-        fileByTime = {}
+        file_by_time = {}
         for file in self.qFiles:
-            file_time = self.getFileTimeStep(file)
-            if file_time not in fileByTime.keys():
-                fileByTime[file_time] = []
-            fileByTime[file_time].append(file)
-        return fileByTime
+            file_time = self.get_file_timestep(file)
+            if file_time not in file_by_time.keys():
+                file_by_time[file_time] = []
+            file_by_time[file_time].append(file)
+        return file_by_time
 
-    def findMaxValuesParallel(self):
-        self.filenames = self.groupFilesbyTime()
+    def find_max_values_parallel(self):
+        """
+        Parallel function to find the max values for each time of data dumped
+        :return: None
+        """
         print(self.filenames)
-        myMean = []
+        my_mean = []
         pool = mp.Pool()
         print("pool made")
-        for i, returnValue in enumerate(
-            pool.imap(self.getValues, self.filenames.keys())
+        for j, returnValue in enumerate(
+            pool.imap(self.get_values, self.filenames.keys())
         ):
-            print(i, "Done")
-            minValue = returnValue[1]
-            maxValue = returnValue[2]
+            print(j, "Done")
+            min_value = returnValue[1]
+            max_value = returnValue[2]
             for i in range(self.lenHeaderCountTitles):
                 self.maxValues[i] = (
                     self.maxValues[i]
-                    if self.maxValues[i] > maxValue[i]
-                    else maxValue[i]
+                    if self.maxValues[i] > max_value[i]
+                    else max_value[i]
                 )
                 self.minValues[i] = (
                     self.minValues[i]
-                    if self.minValues[i] < minValue[i]
-                    else minValue[i]
+                    if self.minValues[i] < min_value[i]
+                    else min_value[i]
                 )
-            myMean.append(returnValue[0][0])
+            my_mean.append(returnValue[0][0])
 
         pool.close()
         pool.join()
-        self.myMean = np.mean(myMean, axis=0)
+        self.my_mean = np.mean(my_mean, axis=0)
         print("My Mean")
-        print(self.myMean)
+        print(self.my_mean)
         print("My Min")
         print(self.minValues)
         print("My Max")
         print(self.maxValues)
 
-    def getValues(self, fileTime):
-        print(fileTime)
+    def get_values(self, file_time):
+        """
+        Calculates minimum and max values for all types of data dumped
+
+        :param file_time: time value of dump data to look at
+
+        :return: mean values, minimum values, max values in a 3xN array: N is number of types of values dumped
+        """
+        print(file_time)
         self.fileCounter += 1
-        minValue = [np.inf] * self.lenHeaderCountTitles
+        min_value = [np.inf] * self.lenHeaderCountTitles
 
-        maxValue = [-np.inf] * self.lenHeaderCountTitles
+        max_value = [-np.inf] * self.lenHeaderCountTitles
 
-        datamean = []
-        for file in self.filenames[fileTime]:
+        data_mean = []
+        for file in self.filenames[file_time]:
             with open(file, "rb") as f:
                 print(f"Opened file {file}")
 
@@ -180,70 +202,70 @@ class fdsOutputToUnity:
                     order="F",
                 ).T
 
-                data_Min = np.min(data, axis=1)
-                # data_Min[0]=1.1
-                data_Min[4] = 15
+                data_min = np.min(data, axis=1)
+                # data_min[0]=1.1
+                data_min[4] = 15
 
-                data_Max = np.max(data, axis=1)
-                filePecentile = []
-                zeroCounter = 0
+                data_max = np.max(data, axis=1)
+                file_percentile = []
+                zero_counter = 0
                 for data_i in data:
-                    dataNoZeros = data_i[data_i > data_Min[zeroCounter]]
-                    if len(dataNoZeros) < 1:
-                        filePecentile.append(0.0)
+                    data_no_zeros = data_i[data_i > data_min[zero_counter]]
+                    if len(data_no_zeros) < 1:
+                        file_percentile.append(0.0)
                         continue
-                    filePecentile.append(np.percentile(dataNoZeros, 99))
-                    newMin = np.min(dataNoZeros)
-                    if newMin < minValue[zeroCounter]:
-                        minValue[zeroCounter] = newMin
-                    if data_Max[zeroCounter] > maxValue[zeroCounter]:
-                        maxValue[zeroCounter] = data_Max[zeroCounter]
+                    file_percentile.append(np.percentile(data_no_zeros, 99))
+                    new_min = np.min(data_no_zeros)
+                    if new_min < min_value[zero_counter]:
+                        min_value[zero_counter] = new_min
+                    if data_max[zero_counter] > max_value[zero_counter]:
+                        max_value[zero_counter] = data_max[zero_counter]
 
-                    zeroCounter += 1
-            datamean.append(filePecentile)
-        return datamean, minValue, maxValue
+                    zero_counter += 1
+            data_mean.append(file_percentile)
+        return data_mean, min_value, max_value
 
     def runParallel(self, multiMesh=None):
         """
         The function to read in and save data in parallel.
 
-        Parameters:
-            hrrLowerLimit (flaot): The lower bounds for HRRPUA o be save
-            smokeLowerLimit (flaot): The lower bounds for HRRPUA o be save
-            multiMesh (Dictionary): All infomation needed for multimesh data
-                Default : None
+        :param multiMesh: default None: dictionary of all mesh infomation needed
 
-
-        Returns:
-            None
+        :return:
         """
 
-        self.hrrLowerLimit = self.minValues[-1]
-        self.smokeLowerLimit = self.myMean[0]
-        self.multiMesh = multiMesh
-        self.filenames = self.groupFilesbyTime()
+        self.hrr_lower_limit = self.minValues[-1]
+        self.smoke_lower_limit = self.my_mean[0]
+        self.multi_mesh = multiMesh
+        self.filenames = self.group_files_by_time()
 
         pool = mp.Pool()
-        for i, temparray in enumerate(
-            pool.imap(self.qFileToDict, self.filenames.keys())
+        for i, temp_array in enumerate(
+            pool.imap(self.q_file_to_dict, self.filenames.keys())
         ):
-            print(i, temparray)
+            print(i, temp_array)
         pool.close()
         pool.join()
         print(self.minValues)
         print(self.maxValues)
 
-    def getMeshNumber(self, fileName):
-        return int(fileName.split("_")[-3])
+    @staticmethod
+    def get_mesh_number(file_name):
+        """
+        Pulls mesh number from filename
+        :param file_name:
+        :return: Mesh Number
+        """
+        return int(file_name.split("_")[-3])
 
-    def qFileToDict(self, fileTime):
+    def q_file_to_dict(self, file_time):
 
         self.fileCounter += 1
-        emptyFile = True
-        currentFireArray = []
-        currentDensityArray = []
-        for file in self.filenames[fileTime]:
-            smokeCounter = 0
+        empty_file = True
+        current_fire_array = []
+        current_density_array = []
+        for file in self.filenames[file_time]:
+            smoke_counter = 0
             with open(file, "rb") as f:
 
                 counter = 0
@@ -263,190 +285,214 @@ class fdsOutputToUnity:
                     order="F",
                 )
 
-                meshNumber = self.getMeshNumber(file) - 1
+                mesh_number = self.get_mesh_number(file) - 1
                 for i in range(nz):
                     for j in range(ny):
                         for k in range(nx):
-                            if self.multiMesh is not None:
-                                meshRow = meshNumber % (self.multiMesh["I_UPPER"] + 1)
-                                meshCol = np.floor(
-                                    meshNumber / (self.multiMesh["I_UPPER"] + 1)
+                            if self.multi_mesh is not None:
+                                mesh_row = mesh_number % (
+                                    self.multi_mesh["I_UPPER"] + 1
                                 )
-                                meshHeight = np.floor(
-                                    meshNumber
+                                mesh_col = np.floor(
+                                    mesh_number / (self.multi_mesh["I_UPPER"] + 1)
+                                )
+                                mesh_height = np.floor(
+                                    mesh_number
                                     / (
-                                        (self.multiMesh["I_UPPER"] + 1)
-                                        * (self.multiMesh["K_UPPER"] + 1)
+                                        (self.multi_mesh["I_UPPER"] + 1)
+                                        * (self.multi_mesh["K_UPPER"] + 1)
                                     )
                                 )
 
-                                i += meshCol * self.multiMesh["K"]
-                                j += meshHeight * self.multiMesh["J"]
-                                k += meshRow * self.multiMesh["I"]
+                                i += mesh_col * self.multi_mesh["K"]
+                                j += mesh_height * self.multi_mesh["J"]
+                                k += mesh_row * self.multi_mesh["I"]
 
-                            if data[counter, 4] >= self.hrrLowerLimit:
-                                emptyFile = False
-                                pointDict = {
+                            if data[counter, 4] >= self.hrr_lower_limit:
+                                empty_file = False
+                                point_dict = {
                                     "X": int(i),
                                     "Y": int(j),
                                     "Z": int(k),
                                     "Datum": data[counter, 4],
                                 }
-                                smokeCounter += 1
-                                currentFireArray.append(pointDict)
+                                smoke_counter += 1
+                                current_fire_array.append(point_dict)
 
                             if round(data[counter, 0], 1) < 1.1:
-                                emptyFile = False
-                                pointDict = {
+                                empty_file = False
+                                point_dict = {
                                     "X": int(i),
                                     "Y": int(j),
                                     "Z": int(k),
                                     "Datum": data[counter, 0],
                                 }
 
-                                currentDensityArray.append(pointDict)
+                                current_density_array.append(point_dict)
                             counter += 1
-        if not emptyFile:
+        if not empty_file:
             # a = []
-            # for i in currentDensityArray:
+            # for i in current_density_array:
             #     a.append(round(i["Datum"],6))
             # a = Counter(a)
             # plt.bar(a.keys(), a.values())
             # plt.show()
-            newfile = self.filenames[fileTime][0]
-            minMaxDict = {"min": list(self.minValues), "max": list(self.maxValues)}
+            newfile = self.filenames[file_time][0]
+            min_max_dict = {"min": list(self.minValues), "max": list(self.maxValues)}
             dictionary = {
-                "fire": currentFireArray,
-                "smoke": currentDensityArray,
-                "configData": minMaxDict,
+                "fire": current_fire_array,
+                "smoke": current_density_array,
+                "configData": min_max_dict,
             }
             self.save_function(dictionary, newfile)
 
         return True
 
-    def write2json(self, mydict, fileName):
-        newFileName = (
-            "_".join(fileName.split("_")[:-3])
+    @staticmethod
+    def write_to_json(my_dict, file_name):
+        new_file_name = (
+            "_".join(file_name.split("_")[:-3])
             + "_1_"
-            + "_".join(fileName.split("_")[-2:])
+            + "_".join(file_name.split("_")[-2:])
         )
 
-        with open(f"{newFileName.split('.q')[0]}.json", "w") as outfile:
-            json.dump(mydict, outfile)
+        with open(f"{new_file_name.split('.q')[0]}.json", "w") as outfile:
+            json.dump(my_dict, outfile)
 
-    def write2bin(self, mydict, fileName):
+    def write2bin(self, mydict, file_name):
 
-        newFileName = (
-            "_".join(fileName.split("_")[:-3])
+        new_file_name = (
+            "_".join(file_name.split("_")[:-3])
             + "_1_"
-            + "_".join(fileName.split("_")[-2:])
+            + "_".join(file_name.split("_")[-2:])
         )
-        newFileName = newFileName.split(".q")[0] + ".bin"
-        newFileName = self.save_location + os.path.basename(newFileName)
-        headerCountTitles = ["smoke", "U-VELOCITY", "V-VELOCITY", "W-VELOCITY", "fire"]
+        new_file_name = new_file_name.split(".q")[0] + ".bin"
+        new_file_name = self.save_location + os.path.basename(new_file_name)
+        header_count_titles = [
+            "smoke",
+            "U-VELOCITY",
+            "V-VELOCITY",
+            "W-VELOCITY",
+            "fire",
+        ]
 
         header = np.array(
             [
                 len(mydict[title]) if title in mydict else 0
-                for title in headerCountTitles
+                for title in header_count_titles
             ],
             dtype=np.int32,
         )
-        print(fileName, header)
-        print(f"Saved to {newFileName}")
-        with open(f"{newFileName}", "wb") as outfile:
+        print(file_name, header)
+        print(f"Saved to {new_file_name}")
+        with open(f"{new_file_name}", "wb") as outfile:
 
             np.ndarray.tofile(header, outfile)
 
-            allData = []
+            all_data = []
             for i in range(self.lenHeaderCountTitles):
-                h = headerCountTitles[i]
+                h = header_count_titles[i]
 
                 if h not in mydict:
                     continue
                 for j in range(header[i]):
                     point = mydict[h][j]
-                    allData.append(point["X"])
-                    allData.append(point["Y"])
-                    allData.append(point["Z"])
+                    all_data.append(point["X"])
+                    all_data.append(point["Y"])
+                    all_data.append(point["Z"])
 
-                    allData.append(point["Datum"])
+                    all_data.append(point["Datum"])
 
             print("min", self.minValues)
             print("max", self.maxValues)
             np.ndarray.tofile(np.array(self.minValues, dtype=np.float32), outfile)
             np.ndarray.tofile(np.array(self.maxValues, dtype=np.float32), outfile)
-            np.ndarray.tofile(np.array(allData, dtype=np.float32), outfile)
-            print(fileName, "saved")
+            np.ndarray.tofile(np.array(all_data, dtype=np.float32), outfile)
+            print(file_name, "saved")
 
-    def write2H5py(self, mydict, fileName):
+    def write_to_hdf5(self, mydict, file_name):
 
-        newFileName = (
-            "_".join(fileName.split("_")[:-3])
+        new_file_name = (
+            "_".join(file_name.split("_")[:-3])
             + "_1_"
-            + "_".join(fileName.split("_")[-2:])
+            + "_".join(file_name.split("_")[-2:])
         )
-        newFileName = newFileName.split(".q")[0] + ".bin"
-        newFileName = self.save_location + os.path.basename(newFileName)
-        headerCountTitles = ["smoke", "U-VELOCITY", "V-VELOCITY", "W-VELOCITY", "fire"]
+        new_file_name = new_file_name.split(".q")[0] + ".bin"
+        new_file_name = self.save_location + os.path.basename(new_file_name)
+        header_count_titles = [
+            "smoke",
+            "U-VELOCITY",
+            "V-VELOCITY",
+            "W-VELOCITY",
+            "fire",
+        ]
 
         header = np.array(
             [
                 len(mydict[title]) if title in mydict else 0
-                for title in headerCountTitles
+                for title in header_count_titles
             ],
             dtype=np.int32,
         )
-        print(fileName, header)
-        print(f"Saved to {newFileName}")
-        with open(f"{newFileName}", "wb") as outfile:
+        print(file_name, header)
+        print(f"Saved to {new_file_name}")
+        with open(f"{new_file_name}", "wb") as outfile:
 
             np.ndarray.tofile(header, outfile)
 
-            allData = []
+            all_data = []
             for i in range(self.lenHeaderCountTitles):
-                h = headerCountTitles[i]
+                h = header_count_titles[i]
 
                 if h not in mydict:
                     continue
                 for j in range(header[i]):
                     point = mydict[h][j]
-                    allData.append(point["X"])
-                    allData.append(point["Y"])
-                    allData.append(point["Z"])
+                    all_data.append(point["X"])
+                    all_data.append(point["Y"])
+                    all_data.append(point["Z"])
 
-                    allData.append(point["Datum"])
+                    all_data.append(point["Datum"])
 
             print("min", self.minValues)
             print("max", self.maxValues)
             np.ndarray.tofile(np.array(self.minValues, dtype=np.float32), outfile)
             np.ndarray.tofile(np.array(self.maxValues, dtype=np.float32), outfile)
-            np.ndarray.tofile(np.array(allData, dtype=np.float32), outfile)
-            print(fileName, "saved")
+            np.ndarray.tofile(np.array(all_data, dtype=np.float32), outfile)
+            print(file_name, "saved")
 
 
 # print( data, header[1:-1])
 
 
 def main(args):
+
+    start_time = time.time()
     if len(args) != 4:
         print(
             "Usage python fdsOutput2Unity.py {FDS Output Directory} "
             "{FDS Input File Path} {Output Directory} {Output FileType}"
         )
 
-    start_time = time.time()
-    fds_loc = "E:\\Trunk\\Trunk\\Trunk\\Trunk.fds"
-    #
-    fds_dir = "E:\\Trunk\\Trunk\\SableWindRE\\"
+        fds_loc = "E:\\Trunk\\Trunk\\Trunk\\Trunk.fds"
+        #
+        fds_dir = "E:\\Trunk\\Trunk\\SableWindRE\\"
+        save_location = "data"
+        save_type = "bin"
+    else:
+        fds_loc = args[0]
+        fds_dir = args[1]
+        save_location = args[2]
+        save_type = args[3]
+
     app = fdsOutputToUnity(
         fds_output_directory=fds_dir,
         fds_input_location=fds_loc,
-        save_location="data",
-        saveType="bin",
+        save_location=save_location,
+        saveType=save_type,
     )
 
-    app.findMaxValuesParallel()
+    app.find_max_values_parallel()
     app.runParallel()
     print(time.time() - start_time)
 

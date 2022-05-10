@@ -77,21 +77,23 @@ python fdsOutput2Unity.py {FDS Output Directory} {FDS Input File Path} {Output D
 ```
 
 python example
+
 ```python
 import fdsOutput2Unity
-fds_output_dir = "/Example/path" # path to FDS output Folder
-fds_input_loc = "/Example/fds/inputfile.fds" # path to FDS output Folder
+
+fds_output_dir = "/Example/path"  # path to FDS output Folder
+fds_input_loc = "/Example/fds/inputfile.fds"  # path to FDS output Folder
 output_dir = "/Example/outputdirectoy"
 output_filetype = "myExampleFiles"
 
 # initalizes the fds data bl
 
 app = fdsOutput2Unity(
-        fds_output_dir,fds_input_loc, output_dir, output_filetype
-    )
+    fds_output_dir, fds_input_loc, output_dir, output_filetype
+)
 
 # Finds the max HRRPUV for the simulation
-app.findMaxValuesParallel()
+app.find_max_values_parallel()
 
 # Saves the location and value for each voxel in the top 99% of the timestep
 app.runParallel()
