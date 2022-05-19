@@ -53,7 +53,7 @@ def main(args):
 
     # Converts plot3d data to a sparce matrix binary file
     app_hrr = fdsOutputToUnity(fdsOutputDir, fdsInputFile, saveLocation, "bin")
-    app_hrr.findMaxValuesParallel()
+    app_hrr.find_max_values_parallel()
     app_hrr.runParallel()
 
 

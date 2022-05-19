@@ -1,21 +1,31 @@
 import sys
 import json
-from collections import defaultdict
-
 import h5py
 import numpy as np
+from collections import defaultdict
 
 
 class fds2ComplexGeom:
     def __init__(self, fds_input_location, tree_id, non_terrain_obsts=[]):
 
+        """
+        Converts fds input file into a JSON with tree location data and complex terrain information
+
+        :param fds_input_location: complete path to fds input file (.fds)
+        :param tree_id: name of the tree label
+        :param non_terrain_obsts: list of any obstacles that are not classified as terrain.
+        """
         self.__treeID = tree_id
         self.__fds_input_location = fds_input_location
         self.__voxalSize = {}
         self.__meshBounds = {}
         self.__rowSpacing = 0
         self.__colSpacing = 0
+        self.n_rows = 0
+        self.n_cols = 0
+
         self.__treeList = []
+        self.json_dict = {}
         self.topography = defaultdict(lambda: {})
         self.__nonTerrainObsts = non_terrain_obsts
         self.read_in_fds_mesh()
@@ -24,8 +34,14 @@ class fds2ComplexGeom:
         self.complex_geom()
         print()
 
-    def read_in_fds_obst(self):
-        counter = 0
+    def read_in_fds_obst(self) -> None:
+        """
+        Reads in fds input file and generates a dictionary of dictionary's
+        containing the elevation data for the terrain
+
+        :return: none
+        """
+        terrain_counter = 0
         last_key = ""
         with open(self.__fds_input_location) as f:
             lines = f.readlines()
@@ -47,7 +63,7 @@ class fds2ComplexGeom:
 
             if any(terrain_flag):
                 print(current_line)
-                counter += 1
+                terrain_counter += 1
                 XB = [
                     float(point)
                     for point in current_line.split("XB=")[1].split(",")[:6]
@@ -61,11 +77,15 @@ class fds2ComplexGeom:
 
                 self.__rowSpacing = abs(XB[0] - XB[1])
 
-        print(counter, "Terrain object found")
+        print(terrain_counter, "Terrain object found")
         self.n_rows = len(self.topography[last_key]) - 1
         self.n_cols = len(self.topography) - 1
 
     def read_in_tree_locations(self):
+        """
+        Reads in all the locations of trees in the fds input file and parses other tree information
+        :return:
+        """
         with open(self.__fds_input_location) as f:
             lines = f.readlines()
 
@@ -83,7 +103,7 @@ class fds2ComplexGeom:
                     xyz_string = tree_line.split("XYZ=")[1].split(",")[:3]
                 elif " " in xyz_string:
                     print(f"Space {xyz_string}")
-                    xyz_string = tree_line.split("XYZ= ")[1].split(' ')[:3]
+                    xyz_string = tree_line.split("XYZ= ")[1].split(" ")[:3]
                     print(xyz_string)
                 else:
                     print("None")
@@ -109,15 +129,20 @@ class fds2ComplexGeom:
             line_counter += 1
 
     def read_in_fds_mesh(self):
+        """
+        Reads in fds input file and parses the MESH infomation
+        :return:
+        """
+
         with open(self.__fds_input_location) as f:
             lines = f.readlines()
 
-        lineCounter = 0
-        while lineCounter < len(lines):
-            current_line = lines[lineCounter]
-            while "/" not in lines[lineCounter]:
-                lineCounter += 1
-                current_line = current_line + lines[lineCounter]
+        line_counter = 0
+        while line_counter < len(lines):
+            current_line = lines[line_counter]
+            while "/" not in lines[line_counter]:
+                line_counter += 1
+                current_line = current_line + lines[line_counter]
             if "&MESH" in current_line:
                 mesh_line = current_line.replace("/", "").replace("\n", "")
 
@@ -143,7 +168,7 @@ class fds2ComplexGeom:
                     "Z": (self.__meshBounds["Z_MAX"] - self.__meshBounds["Z_MIN"])
                     / self.__meshBounds["K"],
                 }
-            lineCounter += 1
+            line_counter += 1
 
     def complex_geom(self) -> None:
         """
@@ -324,6 +349,12 @@ class fds2ComplexGeom:
         }
 
     def save_to_json(self, filename):
+        """
+        Saves all parsed data into a json file
+
+        :param filename:
+        :return:
+        """
 
         for key in self.json_dict:
             print(key, type(self.json_dict[key]))
@@ -334,6 +365,12 @@ class fds2ComplexGeom:
             json.dump(self.json_dict, f)
 
     def write_h5py(self, file_name):
+        """
+        Saves all data into a hdf5 file
+        reading in this type of file in to Unity has not been implemented at this time
+        :param file_name: full file path and name for file to be saved
+        :return:
+        """
         with h5py.File(f"{file_name}.hdf5", "w") as f:
 
             dict_group = f.create_group("meshData")

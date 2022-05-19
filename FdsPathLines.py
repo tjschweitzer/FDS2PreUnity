@@ -816,7 +816,7 @@ def main():
     fds_loc = "/home/kl3pt0/Trunk/Trunk/Trunk.fds"
     fds_dir = "/home/kl3pt0/Work/fds3"
 
-    fds_loc =  "E:\\Trails\\fds\\trails.fds"
+    fds_loc = "E:\\Trails\\fds\\trails.fds"
     #
     fds_dir = "E:\\Trails"
 
@@ -831,7 +831,7 @@ def main():
     #
     # app.filter_streams_by_length()
     # app.draw_stream_lines()
-    app.write_h5py( "E:\\Trails_Save_VR", "weightedMeans")
+    app.write_h5py("E:\\Trails_Save_VR", "weightedMeans")
     print(time.process_time() - start_time)
 
 
