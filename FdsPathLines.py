@@ -184,15 +184,25 @@ class FdsPathLines:
         return self
 
     def run_ode(self, time_step_index, reverse_integration=False):
+        """
+        Runs ODE from index starting point to end of time
+
+        :param time_step_index:
+        :param reverse_integration:
+        :return: ODE results
+        """
         t_span = [
             min(self.__time_list[time_step_index:]),
             max(self.__time_list[time_step_index:]),
         ]
+
+
         current_results = []
 
         if reverse_integration:
             t_span[1] = 0.0
 
+        # Iterates over all starting points
         for startCounter in range(len(self.starting_points)):
             y0 = self.starting_points[startCounter]
 
@@ -226,6 +236,11 @@ class FdsPathLines:
         return current_results
 
     def start_ode(self, reverse_integration=True):
+        """
+
+        :param reverse_integration:
+        :return:
+        """
 
         for t_start in self.__time_list:
             time_step_index = self.__get_closest_time_step_index(t_start)
