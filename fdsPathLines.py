@@ -20,6 +20,9 @@ from scipy import stats
 class FdsPathLines:
     def __init__(self, directory, fds_input_location):
         """
+        Takes plot3D data and calculate the amount of turbulence (represented
+        as Reynolds numbers) to identify regions of interest. Then calculates
+        pathlines that will intersect with points sampled from these regions
 
         :param directory: location of the fds output files
         :param fds_input_location: location of the fds input file
@@ -317,7 +320,7 @@ class FdsPathLines:
                         current_stream.append(
                             [
                                 data[i]["t"][j],
-                                data[i]["re"][j],
+                                data[i]["velocity"][j],
                                 data[i]["y"][0][j],
                                 data[i]["y"][1][j],
                                 data[i]["y"][2][j],
@@ -816,9 +819,9 @@ def main():
     fds_loc = "/home/kl3pt0/Trunk/Trunk/Trunk.fds"
     fds_dir = "/home/kl3pt0/Work/fds3"
 
-    fds_loc = "E:\\Trails\\fds\\trails.fds"
+    fds_loc = "F:\\Simulations\\TrunkAGL\\Trunk\\trails.fds"
     #
-    fds_dir = "E:\\Trails"
+    fds_dir = "F:\\Simulations\\Trunk\\TimeDelay"
 
     start_time = time.perf_counter()
     app = FdsPathLines(fds_dir, fds_loc)

@@ -2,12 +2,17 @@ import shutil
 import sys
 from fds2ComplexGeom import fds2ComplexGeom
 from fdsOutput2Unity import fdsOutputToUnity
-from FdsPathLines import FdsPathLines
+from fdsPathLines import FdsPathLines
 
 import os
 
 
 def main(args):
+    """
+ Creates the p[roper file structure and ensures all functions save data into the proper location
+    :param args:
+    :return: None
+    """
     fdsOutputDir = (
         "/home/trent/Trunk/TimeDelay"  # directory of the plot3d files from fds output
     )

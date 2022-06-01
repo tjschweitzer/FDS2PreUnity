@@ -9,14 +9,16 @@ Reads in FDS output files and outputs hdf5 files containing (N) pathlines sample
 
 Command line example
 ```bash
-python FdsPathLines.py {FDS Output Folder} {FDS Input File Path} {Output Directory} {filename prefix}
+python fdsPathLines.py {FDS Output Folder} {FDS Input File Path} {Output Directory} {filename prefix}
 ```
 
 python example
+
 ```python
-import FdsPathLines
-fds_output_dir = "/Example/path" # path to FDS output Folder
-fds_input_loc = "/Example/fds/inputfile.fds" # path to FDS output Folder
+import fdsPathLines
+
+fds_output_dir = "/Example/path"  # path to FDS output Folder
+fds_input_loc = "/Example/fds/inputfile.fds"  # path to FDS output Folder
 hdf5_output_dir = "/Example/outputdirectoy"
 output_fileprefix = "myExableFiles"
 

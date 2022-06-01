@@ -10,15 +10,15 @@ import fdsreader as fds
 
 class fdsOutputToUnity:
     def __init__(
-        self, fds_output_directory, fds_input_location, save_location, saveType="bin"
+        self, fds_output_directory, fds_input_location, save_location, save_type="bin"
     ):
         """
         Converts plot3D data from fds into hdf5 data to be loaded into unity
 
         :param fds_output_directory:  Full path to where fds data was output
         :param fds_input_location:  Full path to fds input file
-        :param save_location: Full path to where data should be saved one processed
-        :param saveType:
+        :param save_location: Full path to where data should be saved once processed
+        :param save_type: Allows for selection for output filetype
 
         :raises StopIteration: if hrrpuv is not part of plot3D data dump
         """
@@ -52,7 +52,7 @@ class fdsOutputToUnity:
         self.minValues = np.array([np.inf] * self.lenHeaderCountTitles)
         self.maxValues = np.zeros(self.lenHeaderCountTitles)
         self.save_function = (
-            self.write_to_json if saveType == "json" else self.write2bin
+            self.write_to_json if save_type == "json" else self.write2bin
         )
 
         self.filenames = self.group_files_by_time()
@@ -490,7 +490,7 @@ def main(args):
         fds_output_directory=fds_dir,
         fds_input_location=fds_loc,
         save_location=save_location,
-        saveType=save_type,
+        save_type=save_type,
     )
 
     app.find_max_values_parallel()
